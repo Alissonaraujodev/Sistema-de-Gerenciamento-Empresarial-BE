@@ -104,3 +104,4 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router; // Exporta o router para ser usado no server.js
+console.log('Rotas carregadas')
