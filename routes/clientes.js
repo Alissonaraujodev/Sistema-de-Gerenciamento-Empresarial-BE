@@ -1,3 +1,7 @@
+//alterar a rota de busca de cnpj para nome_cliente
+
+require('dotenv').config();
+
 // routes/clientes.js
 const express = require('express');
 const router = express.Router();

@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 // routes/produtos.js
 const express = require('express');
 const router = express.Router();
