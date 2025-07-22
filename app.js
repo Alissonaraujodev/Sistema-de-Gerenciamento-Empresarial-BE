@@ -9,6 +9,7 @@ const db = require('./config/db');
 const produtosRoutes = require('./routes/produtos');
 const clientesRoutes = require('./routes/clientes'); // Importa as rotas de clientes
 const vendasRoutes = require('./routes/vendas');
+const atualizarSlugs = require('./scripts/atualizarSlugs');
 
 app.use(express.json());
 
@@ -39,6 +40,7 @@ app.use('/vendas', vendasRoutes);
 app.listen(port, () => {
   console.log(`Servidor rodando em http://localhost:${port}`);
   console.log('Pressione CTRL+C para parar o servidor.');
+  atualizarSlugs();
 });
 
 
