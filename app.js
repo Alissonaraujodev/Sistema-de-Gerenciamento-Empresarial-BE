@@ -44,3 +44,15 @@ app.listen(port, () => {
 });
 
 
+/*
+{
+  "nome_empresa": "Minha Empresa Ltda.", 
+  "forma_pagamento": "Cartão de Crédito",
+  "itens": [
+    {
+      "codigo_barras": 1234567890124, 
+      "quantidade": 2 
+    }
+  ]
+}
+*/
