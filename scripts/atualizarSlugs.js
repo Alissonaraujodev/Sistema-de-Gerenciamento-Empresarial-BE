@@ -1,17 +1,18 @@
+require('dotenv').config();
 // scripts/atualizarSlugs.js
 const db = require('../config/db');
 const { gerarSlug } = require('../utils/slugify');
 
 async function atualizarSlugs() {
   try {
-    const [clientes] = await db.query('SELECT nome_empresa FROM clientes');
+    const [clientes] = await db.query('SELECT cliente_nome FROM clientes');
 
     for (const cliente of clientes) {
-      const slug = gerarSlug(cliente.nome_empresa);
+      const slug = gerarSlug(cliente.cliente_nome);
 
       await db.query(
-        'UPDATE clientes SET slug = ? WHERE nome_empresa = ?',
-        [slug, cliente.nome_empresa]
+        'UPDATE clientes SET slug = ? WHERE cliente_nome = ?',
+        [slug, cliente.cliente_nome]
       );
     }
 

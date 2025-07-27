@@ -9,6 +9,7 @@ const db = require('./config/db');
 const produtosRoutes = require('./routes/produtos');
 const clientesRoutes = require('./routes/clientes'); // Importa as rotas de clientes
 const vendasRoutes = require('./routes/vendas');
+const caixaRoutes = require('./routes/caixa');
 const atualizarSlugs = require('./scripts/atualizarSlugs');
 
 app.use(express.json());
@@ -36,6 +37,7 @@ app.get('/api/test-db', async (req, res) => {
 app.use('/produtos', produtosRoutes);
 app.use('/clientes', clientesRoutes); // Usa as rotas de clientes sob o prefixo /api/clientes
 app.use('/vendas', vendasRoutes);
+app.use('/caixa', caixaRoutes);
 
 app.listen(port, () => {
   console.log(`Servidor rodando em http://localhost:${port}`);
@@ -44,15 +46,3 @@ app.listen(port, () => {
 });
 
 
-/*
-{
-  "nome_empresa": "Minha Empresa Ltda.", 
-  "forma_pagamento": "Cartão de Crédito",
-  "itens": [
-    {
-      "codigo_barras": 1234567890124, 
-      "quantidade": 2 
-    }
-  ]
-}
-*/
