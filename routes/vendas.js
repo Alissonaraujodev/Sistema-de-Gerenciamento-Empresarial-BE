@@ -62,8 +62,8 @@ router.post("/", async (req, res) => {
     // ----- Lógica 2: Inserir a nova venda na tabela 'vendas' -----
     // O valor_total é calculado e passado aqui
     const [vendaResult] = await connection.query(
-      "INSERT INTO vendas (cliente_nome, valor_total, forma_pagamento) VALUES (?, ?, ?)",
-      [cliente_nome, valor_total, forma_pagamento]
+      "INSERT INTO vendas (cliente_nome, cliente_slug, valor_total, forma_pagamento) VALUES (?, ?, ?, ?)",
+      [cliente_nome, cliente_slug, valor_total, forma_pagamento]
     );
     const pedido = vendaResult.insertId;
 
@@ -186,6 +186,44 @@ router.get("/:id", async (req, res) => {
         message: "Erro interno do servidor ao buscar detalhes da venda.",
         error: error.message,
       });
+  }
+});
+
+// GET /vendas/:pedido/detalhes
+router.get('/:pedido/detalhes', async (req, res) => {
+  const { pedido } = req.params;
+
+  try {
+    const [itensRows] = await db.query(`
+      SELECT
+        iv.codigo_barras,
+        iv.quantidade,
+        iv.preco_unitario,
+        iv.subtotal,
+        p.nome AS nome_produto,
+        p.categoria
+      FROM itens_venda iv
+      JOIN produtos p ON iv.codigo_barras = p.codigo_barras
+      WHERE iv.pedido = ?
+    `, [pedido]);
+
+    if (itensRows.length === 0) {
+      return res.status(404).json({ message: 'Nenhum item encontrado para este pedido.' });
+    }
+
+    const itens = itensRows.map(item => ({
+      codigo_barras: item.codigo_barras,
+      nome_produto: item.nome_produto,
+      categoria: item.categoria,
+      quantidade: item.quantidade,
+      preco_unitario: item.preco_unitario,
+      subtotal: item.subtotal
+    }));
+
+    res.status(200).json({ pedido, itens });
+  } catch (error) {
+    console.error('Erro ao buscar detalhes do pedido:', error);
+    res.status(500).json({ message: 'Erro interno ao buscar itens do pedido.', error: error.message });
   }
 });
 

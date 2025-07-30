@@ -37,3 +37,24 @@ Post produtos
   "quantidade_estoque": 100,
   "categoria": "Alimentos"
 }
+
+post clientes 
+
+{
+  "cnpj": "12.345.678/0001-90",
+  "cliente_nome": "Supermercado São João",
+  "email": "contato@saojoao.com.br",
+  "telefone": "(11) 99999-9999",
+  "logradouro": "Rua das Palmeiras",
+  "numero": "123",
+  "complemento": "Fundos",
+  "bairro": "Jardim Primavera",
+  "cidade": "São Paulo",
+  "estado": "SP",
+  "cep": "01234-567"
+}
+
+
+adicionar um cadastro de funcionarios.
+adicionar um vinculo entre venda e vendedor, para o caso de comissão.
+adicionar o cliente e vendedor ao get de pedidos - http://localhost:3000/vendas/15/detalhes.

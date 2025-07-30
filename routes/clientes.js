@@ -137,4 +137,76 @@ router.delete('/:slug', async (req, res) => {
   }
 });
 
+// routes/clientes.js
+
+// Rota para GERAR RELATÓRIO de cliente com vendas, usando slug
+
+router.get('/:slug/relatorio', async (req, res) => {
+  const { slug } = req.params;
+
+  try {
+    // 1. Busca os dados do cliente pelo slug
+    const [clienteRows] = await db.query(`
+      SELECT cnpj, cliente_nome, slug, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep, data_cadastro
+      FROM clientes
+      WHERE slug = ?
+    `, [slug]);
+
+    if (clienteRows.length === 0) {
+      return res.status(404).json({ message: 'Cliente não encontrado.' });
+    }
+
+    const cliente = clienteRows[0];
+
+    // 2. Monta o endereço completo
+    const enderecoCompleto = `${cliente.logradouro}, ${cliente.numero}${cliente.complemento ? `, ${cliente.complemento}` : ''}, ${cliente.bairro}, ${cliente.cidade} - ${cliente.estado}, ${cliente.cep}`;
+
+    // 3. Busca todas as vendas associadas a este cliente
+    const [vendasRows] = await db.query(`
+      SELECT
+        v.pedido AS venda_id,
+        v.data_venda,
+        v.valor_total,
+        v.forma_pagamento,
+        v.status_pedido,
+        v.status_pagamento,
+        mc.id AS movimentacao_caixa_id,
+        mc.tipo AS tipo_movimentacao_caixa,
+        mc.valor AS valor_movimentacao_caixa,
+        mc.data_movimentacao AS data_movimentacao_caixa
+      FROM vendas v
+      LEFT JOIN movimentacoes_caixa mc ON v.pedido = mc.referencia_venda_id AND mc.tipo = 'entrada'
+      WHERE v.cliente_slug = ?
+      ORDER BY v.data_venda DESC
+    `, [slug]);
+
+    // 4. Para cada venda, busca os itens vendidos
+    const vendasResumo = vendasRows.map(venda => ({
+      pedido: venda.venda_id,
+      status_pagamento: venda.status_pagamento
+    }));
+
+    // 5. Monta o relatório final
+    const relatorioCliente = {
+      cliente: {
+        cnpj: cliente.cnpj,
+        cliente_nome: cliente.cliente_nome,
+        slug: cliente.slug,
+        email: cliente.email,
+        telefone: cliente.telefone,
+        endereco: enderecoCompleto,
+        data_cadastro: cliente.data_cadastro
+      },
+      vendas: vendasResumo
+    };
+
+    res.status(200).json(relatorioCliente);
+
+  } catch (error) {
+    console.error('Erro ao gerar relatório de cliente:', error);
+    res.status(500).json({ message: 'Erro interno do servidor ao gerar relatório de cliente.', error: error.message });
+  }
+});
+
+
 module.exports = router;
