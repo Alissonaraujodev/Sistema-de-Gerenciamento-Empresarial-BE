@@ -7,10 +7,13 @@ const port = process.env.PORT || 3000;
 const db = require('./config/db');
 
 const produtosRoutes = require('./routes/produtos');
-const clientesRoutes = require('./routes/clientes'); // Importa as rotas de clientes
+const clientesRoutes = require('./routes/clientes');
 const vendasRoutes = require('./routes/vendas');
 const caixaRoutes = require('./routes/caixa');
 const atualizarSlugs = require('./scripts/atualizarSlugs');
+const relatoriosRoutes = require('./routes/relatorios');
+const funcionariosRoutes = require('./routes/funcionarios');
+const authRoutes = require('./routes/auth');
 
 app.use(express.json());
 
@@ -38,6 +41,9 @@ app.use('/produtos', produtosRoutes);
 app.use('/clientes', clientesRoutes); // Usa as rotas de clientes sob o prefixo /api/clientes
 app.use('/vendas', vendasRoutes);
 app.use('/caixa', caixaRoutes);
+app.use('/relatorios', relatoriosRoutes);
+app.use('/funcionarios', funcionariosRoutes);
+app.use('/auth', authRoutes); 
 
 app.listen(port, () => {
   console.log(`Servidor rodando em http://localhost:${port}`);
