@@ -58,6 +58,7 @@ adicionar um código/referência a tabela de produtos.
 adicionar um cadastro de funcionarios. ok
 adicionar um vinculo entre venda e vendedor, para o caso de comissão.
 adicionar o cliente e vendedor ao get de pedidos - http://localhost:3000/vendas/15/detalhes.
+adicionar uma abertura de pedidos para possiveis mudanças
 
 1. Relatórios de Caixa e Vendas (Visão Geral) ok
 2. Autenticação e Autorização de Usuários
