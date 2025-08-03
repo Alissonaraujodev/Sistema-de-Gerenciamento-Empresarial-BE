@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const bcrypt = require('bcrypt'); // Importa a biblioteca bcrypt
+const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware'); // Importa os middlewares
 
 const saltRounds = 10; // Custo do hash (quanto maior, mais seguro, mas mais lento)
 
@@ -16,9 +17,9 @@ const isValidCpf = (cpf) => {
     // Por exemplo, algoritmo de validação de dígitos verificadores
     return true;
 };
-
+//
 // Rota para CADASTRAR um novo funcionário (CREATE)
-router.post('/', async (req, res) => {
+router.post('/',authenticateToken, authorizeRole(['Gerente']), async (req, res) => {
   const { nome, cpf, email, telefone, senha, cargo, logradouro, numero, complemento, bairro, cidade, estado, cep } = req.body;
 
   // Validação básica
@@ -60,7 +61,7 @@ router.post('/', async (req, res) => {
 });
 
 // Rota para LISTAR todos os funcionários (READ ALL)
-router.get('/', async (req, res) => {
+router.get('/',authenticateToken, authorizeRole(['Gerente']), async (req, res) => {
   try {
     // Não retornar a senha hash aqui por segurança
     const [rows] = await db.query('SELECT id, nome, cpf, email, telefone, cargo, logradouro, numero, complemento, bairro, cidade, estado, cep, data_cadastro, ativo FROM funcionarios');
@@ -72,7 +73,7 @@ router.get('/', async (req, res) => {
 });
 
 // Rota para BUSCAR um funcionário por ID (READ ONE)
-router.get('/:id', async (req, res) => {
+router.get('/:id',authenticateToken, authorizeRole(['Gerente']), async (req, res) => {
   const { id } = req.params;
   try {
     // Não retornar a senha hash aqui por segurança
@@ -88,7 +89,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Rota para ATUALIZAR um funcionário (UPDATE)
-router.put('/:id', async (req, res) => {
+router.put('/:id',authenticateToken, authorizeRole(['Gerente']), async (req, res) => {
   const { id } = req.params;
   const { nome, cpf, email, telefone, senha, cargo, logradouro, numero, complemento, bairro, cidade, estado, cep, ativo } = req.body;
 
@@ -140,7 +141,7 @@ router.put('/:id', async (req, res) => {
 
 
 // Rota para EXCLUIR um funcionário (DELETE)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id',authenticateToken, authorizeRole(['Gerente']), async (req, res) => {
   const { id } = req.params;
   try {
     const [result] = await db.query('DELETE FROM funcionarios WHERE id = ?', [id]);

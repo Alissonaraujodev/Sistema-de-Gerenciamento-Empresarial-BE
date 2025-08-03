@@ -2,9 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db'); // Importa o pool de conexão do banco de dados
+const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware'); // Importa os middlewares
 
 // Rota para REGISTRAR uma nova movimentação no caixa (CREATE) - Mantenha como está
-router.post('/', async (req, res) => {
+router.post('/',authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
   const { descricao, valor, tipo, observacoes, referencia_venda_id } = req.body;
 
   if (!descricao || valor === undefined || valor <= 0 || !tipo || (tipo !== 'entrada' && tipo !== 'saida')) {
@@ -30,7 +31,7 @@ router.post('/', async (req, res) => {
 });
 
 // Rota para LISTAR movimentações de caixa E/OU Gerar relatório por período (READ ALL / REPORT)
-router.get('/', async (req, res) => {
+router.get('/',authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
   const { start_date, end_date } = req.query; // Pega os parâmetros da query string
 
   let queryMovimentacoes = 'SELECT * FROM movimentacoes_caixa';

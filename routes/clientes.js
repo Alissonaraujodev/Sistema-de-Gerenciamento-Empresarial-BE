@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware'); // Importa os middlewares
 
 // Função auxiliar para gerar slug
 const gerarSlug = (nome) => {
@@ -22,7 +23,7 @@ const isValidCnpj = (cnpj) => {
 };
 
 // 🟢 Cadastrar novo cliente
-router.post('/', async (req, res) => {
+router.post('/',authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
   const { cnpj, cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep } = req.body;
 
   if (!cnpj || !cliente_nome) {
@@ -53,7 +54,7 @@ router.post('/', async (req, res) => {
 });
 
 // 🔵 Listar todos os clientes
-router.get('/', async (req, res) => {
+router.get('/',authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM clientes');
     res.status(200).json(rows);
@@ -64,7 +65,7 @@ router.get('/', async (req, res) => {
 });
 
 // 🟡 Buscar cliente por slug
-router.get('/:slug', async (req, res) => {
+router.get('/:slug',authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
   const { slug } = req.params;
   try {
     const [rows] = await db.query('SELECT * FROM clientes WHERE slug = ?', [slug]);
@@ -79,7 +80,7 @@ router.get('/:slug', async (req, res) => {
 });
 
 // 🟠 Atualizar cliente por slug
-router.put('/:slug', async (req, res) => {
+router.put('/:slug',authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
   const { slug } = req.params;
   const { cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep } = req.body;
 
@@ -121,7 +122,7 @@ router.put('/:slug', async (req, res) => {
 });
 
 // 🔴 Excluir cliente por slug
-router.delete('/:slug', async (req, res) => {
+router.delete('/:slug',authenticateToken, authorizeRole(['Gerente']), async (req, res) => {
   const { slug } = req.params;
   try {
     const [result] = await db.query('DELETE FROM clientes WHERE slug = ?', [slug]);

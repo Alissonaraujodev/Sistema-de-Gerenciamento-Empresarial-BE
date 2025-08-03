@@ -2,9 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db'); // Importa o pool de conexão do banco de dados
+const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware'); // Importa os middlewares
 
 // Rota para Gerar Relatório de Vendas Gerais por Período
-router.get('/vendas', async (req, res) => {
+router.get('/vendas',authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
   const { start_date, end_date } = req.query; // Pega os parâmetros da query string
 
   let queryVendas = `

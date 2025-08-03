@@ -1,3 +1,6 @@
+Para fazer usar qualquer rota colocar a url que deseja, ir em 'Headers' adicionar 'Authorization' e 'Bearer token....'
+
+
 Post venda
 
 {
@@ -54,14 +57,41 @@ post clientes
   "cep": "01234-567"
 }
 
-adicionar um código/referência a tabela de produtos. 
+post funcionarios
+
+{
+  "nome": "Andressa Oliveira",
+  "cpf": "478.322.789-99",
+  "email": "andressa.oliveira@empresa.com",
+  "telefone": "(11) 97654-3210",
+  "senha": "Geren@478#Strong",
+  "cargo": "Gerente",
+  "logradouro": "Rua Nova Esperança",
+  "numero": "88",
+  "complemento": "Casa 1",
+  "bairro": "Vila Nova",
+  "cidade": "São Paulo",
+  "estado": "SP",
+  "cep": "04567-000"
+}
+
+post login (http://localhost:3000/auth/login)
+
+{
+    "email": "andressa.oliveira@empresa.com",
+    "senha": "Geren@478#Strong"
+}
+
+
+adicionar um código/referência a tabela de produtos. ok
 adicionar um cadastro de funcionarios. ok
 adicionar um vinculo entre venda e vendedor, para o caso de comissão.
 adicionar o cliente e vendedor ao get de pedidos - http://localhost:3000/vendas/15/detalhes.
+trocar a busca(get) das rotas, tirar o slug e deixar igual a busca de produtos
 adicionar uma abertura de pedidos para possiveis mudanças
 
-1. Relatórios de Caixa e Vendas (Visão Geral) ok
-2. Autenticação e Autorização de Usuários
+1. Relatórios de Caixa e Vendas (Visão Geral) - ok
+2. Autenticação e Autorização de Usuários - ok
 3. Validações Mais Robustas e Tratamento de Erros Aprimorado
 4. Paginação e Filtros para Listagens
 

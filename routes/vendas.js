@@ -3,9 +3,10 @@ require("dotenv").config();
 const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
+const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware'); // Importa os middlewares
 
 // Rota para REGISTRAR uma nova venda (CREATE)
-router.post("/", async (req, res) => {
+router.post("/",authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
   const { cliente_nome, forma_pagamento, itens } = req.body;
 
   // Verificação básica: a venda deve ter itens
@@ -134,7 +135,7 @@ router.post("/", async (req, res) => {
 });
 
 // Rota para LISTAR todas as vendas (READ ALL)
-router.get("/", async (req, res) => {
+router.get("/",authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
   try {
     const [rows] = await db.query("SELECT * FROM vendas");
     res.status(200).json(rows);
@@ -150,7 +151,7 @@ router.get("/", async (req, res) => {
 });
 
 // Rota para OBTER os detalhes de uma venda por ID (READ ONE)
-router.get("/:id", async (req, res) => {
+router.get("/:id",authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -190,7 +191,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // GET /vendas/:pedido/detalhes
-router.get('/:pedido/detalhes', async (req, res) => {
+router.get('/:pedido/detalhes',authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
   const { pedido } = req.params;
 
   try {
