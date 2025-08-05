@@ -53,73 +53,106 @@ router.post('/',authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa'
   }
 });
 
-// 🔵 Listar todos os clientes
-router.get('/',authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+// 🔵 Listar todos os clientes por nome parcial
+router.get('/', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+  const { search } = req.query;
+
+  let sql = 'SELECT * FROM clientes';
+  const params = [];
+
+  if (search) {
+    sql += ' WHERE cliente_nome LIKE ?';
+    params.push(`%${search}%`, search);
+  }
+
+  sql += ' ORDER BY cliente_nome ASC';
+
   try {
-    const [rows] = await db.query('SELECT * FROM clientes');
+    const [rows] = await db.query(sql, params);
     res.status(200).json(rows);
   } catch (error) {
-    console.error('Erro ao listar clientes:', error);
+    console.error('Erro ao buscar clientes:', error);
     res.status(500).json({ message: 'Erro interno ao buscar clientes.', error: error.message });
   }
 });
 
-// 🟡 Buscar cliente por slug
-router.get('/:slug',authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
-  const { slug } = req.params;
-  try {
-    const [rows] = await db.query('SELECT * FROM clientes WHERE slug = ?', [slug]);
-    if (rows.length === 0) {
-      return res.status(404).json({ message: 'Cliente não encontrado.' });
+// 🔵 Listar clientes por nome 
+router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+  const { identificador } = req.params;
+
+  let sql = `
+    SELECT cnpj, cliente_nome, slug, email, telefone, logradouro, numero, complemento, bairro,
+           cidade, estado, cep, data_cadastro
+    FROM clientes
+    `;
+  
+  const params = [];
+
+   // Se tiver um identificador na URL (id, nome, código de barras ou referência)
+  if (identificador) {
+    sql += `
+      WHERE cliente_nome = ?
+      LIMIT 1
+    `;
+    params.push(identificador, identificador);
+
+    try {
+      const [rows] = await db.query(sql, params);
+
+      if (identificador && rows.length === 0) {
+        return res.status(404).json({ message: 'Cliente não encontrado.' });
+      }
+
+      res.status(200).json(identificador ? rows[0] : rows);
+    } catch (error) {
+      console.error('Erro ao buscar clientes:', error);
+      res.status(500).json({ message: 'Erro interno do servidor ao buscar clientes.', error: error.message });
     }
-    res.status(200).json(rows[0]);
-  } catch (error) {
-    console.error('Erro ao buscar cliente:', error);
-    res.status(500).json({ message: 'Erro interno ao buscar cliente.', error: error.message });
   }
 });
 
-// 🟠 Atualizar cliente por slug
-router.put('/:slug',authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
-  const { slug } = req.params;
-  const { cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep } = req.body;
+// Rota para ATUALIZAR um cliente (UPDATE)
 
-  if (!cliente_nome) {
-    return res.status(400).json({ message: 'O nome da empresa é obrigatório para atualizar.' });
+router.put('/:identificador', authenticateToken, authorizeRole(['Gerente']), async (req, res) => {
+  const { identificador } = req.params;
+  const { cnpj, cliente_nome, slug, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep } = req.body;
+
+  if (!cnpj || !cliente_nome || !email  || telefone === undefined || logradouro === undefined || numero === undefined || complemento === undefined || bairro === undefined || cidade === undefined || estado === undefined || cep === undefined) {
+    return res.status(400).json({ message: 'Todos os campos são obrigatórios.' });
   }
 
-  const novoSlug = gerarSlug(cliente_nome);
-
   try {
+    // Primeiro tenta buscar o clientes
+    const [clientes] = await db.query(
+      `SELECT cnpj FROM clientes WHERE cnpj = ? OR cliente_nome = ? LIMIT 1`,
+      [identificador, identificador]
+    );
+
+    if (clientes.length === 0) {
+      return res.status(404).json({ message: 'Cliente não encontrado.' });
+    }
+
+    const clienteCnpj = clientes[0].cnpj;
+
     const sql = `
-      UPDATE clientes SET 
-        cliente_nome = ?, 
-        slug = ?, 
-        email = ?, 
-        telefone = ?, 
-        logradouro = ?, 
-        numero = ?, 
-        complemento = ?, 
-        bairro = ?, 
-        cidade = ?, 
-        estado = ?, 
-        cep = ?
-      WHERE slug = ?
+      UPDATE clientes 
+      SET cnpj = ?, cliente_nome = ?, slug = ?, email = ?, telefone = ?, logradouro = ?, numero = ?, complemento = ?, bairro = ?, cidade =? , estado = ?, cep = ?
+      WHERE cnpj = ?
     `;
-    const values = [cliente_nome, novoSlug, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep, slug];
+    const values = [cnpj, cliente_nome, slug, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep, clienteCnpj];
 
     const [result] = await db.query(sql, values);
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Cliente não encontrado para atualização.' });
-    }
-
-    res.status(200).json({ message: 'Cliente atualizado com sucesso!', novoSlug });
+    res.status(200).json({ message: 'Cliente atualizado com sucesso!' });
   } catch (error) {
     console.error('Erro ao atualizar cliente:', error);
-    res.status(500).json({ message: 'Erro interno ao atualizar cliente.', error: error.message });
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ message: 'Cnpj ou Nome já cadastrado para outro cliente.' });
+    }
+    res.status(500).json({ message: 'Erro interno ao atualizar produto.', error: error.message }); 
   }
 });
+
 
 // 🔴 Excluir cliente por slug
 router.delete('/:slug',authenticateToken, authorizeRole(['Gerente']), async (req, res) => {

@@ -85,10 +85,10 @@ post login (http://localhost:3000/auth/login)
 
 adicionar um código/referência a tabela de produtos. ok
 adicionar um cadastro de funcionarios. ok
-trocar a busca(get) das rotas, tirar o slug e deixar igual a busca de produtos
+trocar as rotas, e deixar igual ao get,put e delete de produtos (clientes está feito até a parte do put falta o delete e verificar os relatórios), ver se é viavel tirar o slug**
 adicionar um vinculo entre venda e vendedor, para o caso de comissão.
 adicionar o cliente e vendedor ao get de pedidos - http://localhost:3000/vendas/15/detalhes.
-adicionar uma abertura de pedidos para possiveis mudanças
+adicionar uma abertura de pedidos para possiveis mudanças.
 
 1. Relatórios de Caixa e Vendas (Visão Geral) - ok
 2. Autenticação e Autorização de Usuários - ok
