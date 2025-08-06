@@ -10,7 +10,6 @@ const produtosRoutes = require('./routes/produtos');
 const clientesRoutes = require('./routes/clientes');
 const vendasRoutes = require('./routes/vendas');
 const caixaRoutes = require('./routes/caixa');
-const atualizarSlugs = require('./scripts/atualizarSlugs');
 const relatoriosRoutes = require('./routes/relatorios');
 const funcionariosRoutes = require('./routes/funcionarios');
 const authRoutes = require('./routes/auth');
@@ -48,7 +47,6 @@ app.use('/auth', authRoutes);
 app.listen(port, () => {
   console.log(`Servidor rodando em http://localhost:${port}`);
   console.log('Pressione CTRL+C para parar o servidor.');
-  atualizarSlugs();
 });
 
 

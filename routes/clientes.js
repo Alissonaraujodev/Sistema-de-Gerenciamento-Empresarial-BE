@@ -2,19 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
-const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware'); // Importa os middlewares
+const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware');
+const { limparDocumento } = require('../utils/limparDocumento');
 
-// Função auxiliar para gerar slug
-const gerarSlug = (nome) => {
-  return nome
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // Remove acentos
-    .replace(/[^\w\s-]/g, '')        // Remove caracteres especiais
-    .replace(/\s+/g, '-')            // Substitui espaços por hífens
-    .replace(/--+/g, '-')            // Remove múltiplos hífens
-    .trim();
-};
 
 // Função auxiliar de validação de CNPJ (simples)
 const isValidCnpj = (cnpj) => {
@@ -24,26 +14,28 @@ const isValidCnpj = (cnpj) => {
 
 // 🟢 Cadastrar novo cliente
 router.post('/',authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
-  const { cnpj, cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep } = req.body;
+  const {cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep } = req.body;
+  let {cnpj} = req.body;
 
   if (!cnpj || !cliente_nome) {
     return res.status(400).json({ message: 'CNPJ e nome do cliente são obrigatórios.' });
   }
+   
+  cnpj = limparDocumento(cnpj);
+
   if (!isValidCnpj(cnpj)) {
     return res.status(400).json({ message: 'CNPJ inválido.' });
   }
 
-  const slug = gerarSlug(cliente_nome);
-
   try {
     const sql = `
-      INSERT INTO clientes (cnpj, cliente_nome, slug, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO clientes (cnpj, cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    const values = [cnpj, cliente_nome, slug, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep];
+    const values = [cnpj, cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep];
 
     const [result] = await db.query(sql, values);
-    res.status(201).json({ message: 'Cliente cadastrado com sucesso!', slug });
+    res.status(201).json({ message: 'Cliente cadastrado com sucesso!', cliente_nome });
   } catch (error) {
     console.error('Erro ao cadastrar cliente:', error);
     if (error.code === 'ER_DUP_ENTRY') {
@@ -76,7 +68,7 @@ router.get('/', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa'
   }
 });
 
-// 🔵 Listar clientes por nome 
+// 🔵 Listar clientes por nome ou cnpj
 router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
   const { identificador } = req.params;
 
@@ -88,10 +80,10 @@ router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vend
   
   const params = [];
 
-   // Se tiver um identificador na URL (id, nome, código de barras ou referência)
+   // Se tiver um identificador na URL (cnpj, nome)
   if (identificador) {
     sql += `
-      WHERE cliente_nome = ?
+      WHERE cliente_nome = ? OR cnpj = ?
       LIMIT 1
     `;
     params.push(identificador, identificador);
@@ -154,37 +146,58 @@ router.put('/:identificador', authenticateToken, authorizeRole(['Gerente']), asy
 });
 
 
-// 🔴 Excluir cliente por slug
-router.delete('/:slug',authenticateToken, authorizeRole(['Gerente']), async (req, res) => {
-  const { slug } = req.params;
-  try {
-    const [result] = await db.query('DELETE FROM clientes WHERE slug = ?', [slug]);
+// 🔴 Excluir cliente por cnpj ou nome
 
-    if (result.affectedRows === 0) {
+router.delete('/:identificador', authenticateToken, authorizeRole(['Gerente']), async (req, res) => {
+  const { identificador } = req.params;
+
+  try {
+    // Busca o nome do cliente com base no identificador fornecido
+    const [clientes] = await db.query(
+      `SELECT cnpj FROM clientes WHERE cnpj = ? OR cliente_nome = ? LIMIT 1`,
+      [identificador, identificador]
+    );
+
+    if (clientes.length === 0) {
       return res.status(404).json({ message: 'Cliente não encontrado para exclusão.' });
     }
 
+    const clienteCnpj = clientes[0].cnpj;
+
+    // Tenta excluir o cliente
+    const [result] = await db.query('DELETE FROM clientes WHERE cnpj = ?', [clienteCnpj]);
+
     res.status(200).json({ message: 'Cliente excluído com sucesso!' });
+
   } catch (error) {
     console.error('Erro ao excluir cliente:', error);
-    res.status(500).json({ message: 'Erro interno ao excluir cliente.', error: error.message });
+
+    // Verifica se o erro foi por restrição de chave estrangeira
+    if (error.code === 'ER_ROW_IS_REFERENCED_2' || error.errno === 1451) {
+      return res.status(409).json({
+        message: 'Não é possível excluir este cliente porque ele está vinculado a uma venda (restrição de integridade).',
+        error: error.message
+      });
+    }
+
+    res.status(500).json({ message: 'Erro interno do servidor ao excluir cliente.', error: error.message });
   }
 });
 
-// routes/clientes.js
 
-// Rota para GERAR RELATÓRIO de cliente com vendas, usando slug
+// Rota para GERAR RELATÓRIO de cliente com vendas
 
-router.get('/:slug/relatorio', async (req, res) => {
-  const { slug } = req.params;
+router.get('/:nome/relatorio', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
+  const { nome } = req.params;
 
   try {
-    // 1. Busca os dados do cliente pelo slug
+    // 1. Busca o cliente pelo nome (parcial e insensível a maiúsculas)
     const [clienteRows] = await db.query(`
       SELECT cnpj, cliente_nome, slug, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep, data_cadastro
       FROM clientes
-      WHERE slug = ?
-    `, [slug]);
+      WHERE LOWER(cliente_nome) LIKE LOWER(?)
+      LIMIT 1
+    `, [`%${nome}%`]);
 
     if (clienteRows.length === 0) {
       return res.status(404).json({ message: 'Cliente não encontrado.' });
@@ -195,7 +208,7 @@ router.get('/:slug/relatorio', async (req, res) => {
     // 2. Monta o endereço completo
     const enderecoCompleto = `${cliente.logradouro}, ${cliente.numero}${cliente.complemento ? `, ${cliente.complemento}` : ''}, ${cliente.bairro}, ${cliente.cidade} - ${cliente.estado}, ${cliente.cep}`;
 
-    // 3. Busca todas as vendas associadas a este cliente
+    // 3. Busca as vendas do cliente (nome parcial e case-insensitive)
     const [vendasRows] = await db.query(`
       SELECT
         v.pedido AS venda_id,
@@ -210,17 +223,16 @@ router.get('/:slug/relatorio', async (req, res) => {
         mc.data_movimentacao AS data_movimentacao_caixa
       FROM vendas v
       LEFT JOIN movimentacoes_caixa mc ON v.pedido = mc.referencia_venda_id AND mc.tipo = 'entrada'
-      WHERE v.cliente_slug = ?
+      WHERE LOWER(v.cliente_nome) LIKE LOWER(?)
       ORDER BY v.data_venda DESC
-    `, [slug]);
+    `, [`%${nome}%`]);
 
-    // 4. Para cada venda, busca os itens vendidos
     const vendasResumo = vendasRows.map(venda => ({
       pedido: venda.venda_id,
       status_pagamento: venda.status_pagamento
     }));
 
-    // 5. Monta o relatório final
+    // 4. Monta o relatório final
     const relatorioCliente = {
       cliente: {
         cnpj: cliente.cnpj,
@@ -238,9 +250,13 @@ router.get('/:slug/relatorio', async (req, res) => {
 
   } catch (error) {
     console.error('Erro ao gerar relatório de cliente:', error);
-    res.status(500).json({ message: 'Erro interno do servidor ao gerar relatório de cliente.', error: error.message });
+    res.status(500).json({
+      message: 'Erro interno do servidor ao gerar relatório de cliente.',
+      error: error.message
+    });
   }
 });
+
 
 
 module.exports = router;

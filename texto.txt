@@ -60,35 +60,40 @@ post clientes
 post funcionarios
 
 {
-  "nome": "Andressa Oliveira",
-  "cpf": "478.322.789-99",
-  "email": "andressa.oliveira@empresa.com",
-  "telefone": "(11) 97654-3210",
-  "senha": "Geren@478#Strong",
+  "nome": "Mariana Souza",
+  "cpf": "45896214700",
+  "email": "mariana.souza@empresa.com",
+  "telefone": "(11) 98765-4321",
+  "senha": "4589Mari_ana",
   "cargo": "Gerente",
-  "logradouro": "Rua Nova Esperança",
-  "numero": "88",
-  "complemento": "Casa 1",
-  "bairro": "Vila Nova",
+  "logradouro": "Rua das Acácias",
+  "numero": "256",
+  "complemento": "Bloco B, Apto 302",
+  "bairro": "Centro",
   "cidade": "São Paulo",
   "estado": "SP",
-  "cep": "04567-000"
+  "cep": "01001-000",
+  "ativo": 1
 }
 
 post login (http://localhost:3000/auth/login)
 
 {
-    "email": "andressa.oliveira@empresa.com",
-    "senha": "Geren@478#Strong"
+  "email": "mariana.souza@empresa.com",
+  "senha": "4589Mari_ana"
 }
 
 
-adicionar um código/referência a tabela de produtos. ok
-adicionar um cadastro de funcionarios. ok
-trocar as rotas, e deixar igual ao get,put e delete de produtos (clientes está feito até a parte do put falta o delete e verificar os relatórios), ver se é viavel tirar o slug**
+adicionar um código/referência a tabela de produtos. - ok
+adicionar um cadastro de funcionarios. - ok
+verificar os pontos, hífens e barras em cpf e cnpj na hora do cadastro - ok
+trocar as rotas, e deixar igual ao get,put e delete de produtos - ok 
+ver se é viavel tirar o slug - ok 
+
 adicionar um vinculo entre venda e vendedor, para o caso de comissão.
-adicionar o cliente e vendedor ao get de pedidos - http://localhost:3000/vendas/15/detalhes.
 adicionar uma abertura de pedidos para possiveis mudanças.
+adicionar o cliente e vendedor ao get de pedidos - http://localhost:3000/vendas/15/detalhes.
+adicionar responsavel pelo cadastro funcionarios, clientes e produtos.
 
 1. Relatórios de Caixa e Vendas (Visão Geral) - ok
 2. Autenticação e Autorização de Usuários - ok
