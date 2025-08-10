@@ -23,11 +23,23 @@ Put / http://localhost:3000/vendas/23/itens
   ]
 }
 
-Put  / http://localhost:3000/vendas/23/fechar
-(Para fevhar o pedido)
+Post  / http://localhost:3000/vendas/fechar
+(Para fechar o pedido)
+
 {
-  "forma_pagamento": "Dinheiro",
-  "parcelas": 1
+  "pedido": 28,                   
+  "forma_pagamento": "Parcelado",
+  "valor_total": 283.29999999999995,
+  "valor_sinal": 50.00,
+  "parcelas": 3
+}
+
+Post
+http://localhost:3000/vendas/parcelas/pagar
+{
+  "forma_pagamento": "",
+  "pedido": 28,
+  "numero_parcela": 3
 }
 
 Post caixa 
@@ -108,8 +120,8 @@ ver se é viavel tirar o slug - ok
 adicionar um vinculo entre venda e vendedor, para o caso de comissão. ok
 adicionar o cliente e vendedor ao get de pedidos - http://localhost:3000/vendas/15/detalhes. ok
 adicionar uma abertura de pedidos para possiveis mudanças. ok 
+testar rota de vendas - ok 
 
-testar rota de vendas
 adicionar responsavel pelo cadastro funcionarios, clientes e produtos.
 oeganizar e decidir o que irá aparecer nos relatorios - 
 
@@ -119,3 +131,90 @@ oeganizar e decidir o que irá aparecer nos relatorios -
 4. Paginação e Filtros para Listagens
 
 
+/*
+// Rota para FECHAR um pedido de venda (ATUALIZA ESTOQUE E CAIXA)
+router.put('/:pedido/fechar', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+    const { pedido } = req.params;
+    const { forma_pagamento, parcelas } = req.body; // Pega forma_pagamento e parcelas do corpo da requisição
+ 
+    if (!forma_pagamento) {
+      return res.status(400).json({ message: 'A forma de pagamento é obrigatória para fechar o pedido.' });
+    }
+ 
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+ 
+        // 1. Busca o pedido e seus itens com FOR UPDATE para bloquear
+        const [vendaRows] = await connection.query('SELECT * FROM vendas WHERE pedido = ? FOR UPDATE', [pedido]);
+        const venda = vendaRows[0];
+ 
+        if (!venda) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'Pedido não encontrado.' });
+        }
+        if (venda.status_pedido !== 'Aberto') {
+            await connection.rollback();
+            return res.status(400).json({ message: `O pedido já está com status '${venda.status_pedido}'.` });
+        }
+ 
+        const [itensRows] = await connection.query('SELECT * FROM itens_venda WHERE pedido = ?', [pedido]);
+        if (itensRows.length === 0) {
+            await connection.rollback();
+            return res.status(400).json({ message: 'Não é possível fechar um pedido sem itens.' });
+        }
+ 
+        // 2. Verifica o estoque antes de fechar a venda
+        for (const item of itensRows) {
+            const [produtoRows] = await connection.query('SELECT quantidade FROM produtos WHERE codigo_barras = ?', [item.codigo_barras]);
+            const produto = produtoRows[0];
+            if (produto.quantidade < item.quantidade) {
+                await connection.rollback();
+                return res.status(400).json({ message: `Estoque insuficiente para o produto com codigo_barras ${item.codigo_barras}.` });
+            }
+        }
+ 
+        // 3. Dá baixa no estoque e altera o status da venda e a forma de pagamento
+        for (const item of itensRows) {
+            await connection.query('UPDATE produtos SET quantidade = quantidade - ? WHERE codigo_barras = ?', [item.quantidade, item.codigo_barras]);
+        }
+        await connection.query('UPDATE vendas SET status_pedido = ?, forma_pagamento = ?, parcelas = ?, status_pagamento = ? WHERE pedido = ?', ['Concluída', forma_pagamento, parcelas || 1,'Pago', pedido]);
+ 
+        // 4. Lógica para PAGAMENTO PARCELADO vs. PAGAMENTO À VISTA
+        const valor_total = venda.valor_total;
+        
+        if (parcelas > 1) {
+            const valor_parcela = valor_total / parcelas;
+            for (let i = 1; i <= parcelas; i++) {
+                const data_vencimento = new Date();
+                data_vencimento.setDate(data_vencimento.getDate() + (i * 30));
+ 
+                await connection.query(
+                    'INSERT INTO pagamentos_parcelados (pedido, numero_parcela, valor_parcela, data_vencimento, status_pagamento) VALUES (?, ?, ?, ?, ?)',
+                    [pedido, i, valor_parcela, data_vencimento, 'Pendente']
+                );
+            }
+            res.status(200).json({ message: 'Pedido fechado com sucesso! Plano de pagamento parcelado criado.', vendaId: pedido });
+ 
+        } else { // Pagamento à vista (lógica original)
+            try {
+                await connection.query(
+                    'INSERT INTO movimentacoes_caixa (descricao, valor, tipo, referencia_venda_id) VALUES (?, ?, ?, ?)',
+                    [`Venda #${pedido} (Concluída)`, valor_total, 'entrada', pedido]
+                );
+            } catch (caixaError) {
+                console.error('Atenção: Erro ao registrar movimentação de caixa para a venda:', pedido, caixaError);
+            }
+            res.status(200).json({ message: 'Venda fechada com sucesso!', vendaId: pedido });
+        }
+ 
+        await connection.commit();
+    } catch (error) {
+        await connection.rollback();
+        console.error('Erro ao fechar pedido de venda:', error);
+        res.status(500).json({ message: 'Erro ao fechar pedido de venda.', error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+*/
