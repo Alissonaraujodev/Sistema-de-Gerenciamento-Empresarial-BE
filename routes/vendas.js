@@ -1,19 +1,16 @@
-require("dotenv").config();
-
-const express = require("express");
+/*
+const express = require('express');
 const router = express.Router();
-const db = require("../config/db");
-const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware'); // Importa os middlewares
+const db = require('../config/db');
+const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware'); // Importe os middlewares
 
 // Rota para REGISTRAR uma nova venda (CREATE)
-router.post("/",authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
-  const { cliente_nome, forma_pagamento, itens } = req.body;
+router.post('/', authenticateToken, authorizeRole(['Gerente', 'Vendedor']), async (req, res) => {
+  const { cliente_codigo_barras, forma_pagamento, itens } = req.body;
+  const vendedorId = req.user.id; // O ID do vendedor vem do token JWT (usuário logado)
 
-  // Verificação básica: a venda deve ter itens
   if (!Array.isArray(itens) || itens.length === 0) {
-    return res
-      .status(400)
-      .json({ message: "A venda deve conter pelo menos um item." });
+    return res.status(400).json({ message: 'A venda deve conter pelo menos um item.' });
   }
 
   const connection = await db.getConnection();
@@ -21,211 +18,372 @@ router.post("/",authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa'
     await connection.beginTransaction();
 
     let valor_total = 0;
-    // Para armazenar os dados dos produtos já verificados e evitar consultas duplicadas
-    const produtosValidados = new Map();
 
-    // ----- Lógica 1: Verificar estoque e calcular o valor total (Aprimorada) -----
     for (const item of itens) {
       const { codigo_barras, quantidade } = item;
 
       if (quantidade <= 0) {
-        throw new Error(
-          `A quantidade do produto ${codigo_barras} deve ser maior que zero.`
-        );
+        throw new Error(`A quantidade do produto ${codigo_barras} deve ser maior que zero.`);
       }
 
-      // Busca o produto no banco de dados para verificar o estoque e obter o preço
-      // AQUI: A consulta já é por codigo_barras, que é a PK dos produtos agora.
-      const [produtoRows] = await connection.query(
-        "SELECT nome, preco_venda, quantidade_estoque FROM produtos WHERE codigo_barras = ?",
-        [codigo_barras]
-      );
+      const [produtoRows] = await connection.query('SELECT codigo_barras, preco_venda, quantidade FROM produtos WHERE codigo_barras = ?', [codigo_barras]);
       const produto = produtoRows[0];
 
       if (!produto) {
-        throw new Error(
-          `Produto com código de barras ${codigo_barras} não encontrado.`
-        );
+        throw new Error(`Produto com código de barras ${codigo_barras} não encontrado.`);
       }
-      if (produto.quantidade_estoque < quantidade) {
-        throw new Error(
-          `Estoque insuficiente para o produto "${produto.nome}". Quantidade disponível: ${produto.quantidade_estoque}`
-        );
+      if (produto.quantidade < quantidade) {
+        throw new Error(`Estoque insuficiente para o produto "${produto.codigo_barras}". Quantidade disponível: ${produto.quantidade}`);
       }
 
-      // Armazena o produto validado para uso posterior (Lógica 3)
-      produtosValidados.set(codigo_barras, produto);
-
-      // Adiciona o subtotal ao valor total da venda
       valor_total += produto.preco_venda * quantidade;
     }
 
-    // ----- Lógica 2: Inserir a nova venda na tabela 'vendas' -----
-    // O valor_total é calculado e passado aqui
+    // ----- AQUI: Adiciona vendedor_id à query de INSERT na tabela vendas -----
     const [vendaResult] = await connection.query(
-      "INSERT INTO vendas (cliente_nome, cliente_slug, valor_total, forma_pagamento) VALUES (?, ?, ?, ?)",
-      [cliente_nome, cliente_slug, valor_total, forma_pagamento]
+      'INSERT INTO vendas (cliente_codigo_barras, vendedor_id, valor_total, forma_pagamento) VALUES (?, ?, ?, ?)',
+      [cliente_codigo_barras, vendedorId, valor_total, forma_pagamento]
     );
     const pedido = vendaResult.insertId;
 
-    // ----- Lógica 3: Inserir cada item na tabela 'itens_venda' e atualizar o estoque -----
     for (const item of itens) {
       const { codigo_barras, quantidade } = item;
-
-      // Reutiliza o produto já validado do Map
-      const produto = produtosValidados.get(codigo_barras);
-
-      // Se por algum motivo o produto não estivesse no Map (o que não deveria acontecer com a lógica acima)
-      if (!produto) {
-        throw new Error(
-          `Erro interno: Dados do produto ${codigo_barras} não encontrados após validação.`
-        );
-      }
-
-      const preco_unitario = produto.preco_venda; // AGORA produto.preco_venda ESTÁ GARANTIDO EXISTIR
+      const [produtoRows] = await connection.query('SELECT preco_venda FROM produtos WHERE codigo_barras = ?', [codigo_barras]);
+      const preco_unitario = produtoRows[0].preco_venda;
       const subtotal = preco_unitario * quantidade;
 
-      // Insere o item na tabela 'itens_venda'
       await connection.query(
-        "INSERT INTO itens_venda (pedido, codigo_barras, quantidade, preco_unitario, subtotal) VALUES (?, ?, ?, ?, ?)",
+        'INSERT INTO itens_venda (pedido, codigo_barras, quantidade, preco_unitario, subtotal) VALUES (?, ?, ?, ?, ?)',
         [pedido, codigo_barras, quantidade, preco_unitario, subtotal]
       );
 
-      // Atualiza o estoque na tabela 'produtos'
-      // AQUI: A atualização do estoque também deve usar codigo_barras, não id.
-      await connection.query(
-        "UPDATE produtos SET quantidade_estoque = quantidade_estoque - ? WHERE codigo_barras = ?",
-        [quantidade, codigo_barras]
-      );
+      await connection.query('UPDATE produtos SET quantidade = quantidade - ? WHERE codigo_barras = ?', [quantidade, codigo_barras]); // 'estoque' ao invés de 'quantidade_estoque'
     }
 
-    // Se todas as operações foram bem-sucedidas, confirma a transação
     await connection.commit();
 
-    // Após a venda ser confirmada no banco, registra a entrada no caixa
     try {
       await connection.query(
-        "INSERT INTO movimentacoes_caixa (descricao, valor, tipo, referencia_venda_id) VALUES (?, ?, ?, ?)",
-        [`Venda #${pedido}`, valor_total, "entrada", pedido]
+        'INSERT INTO movimentacoes_caixa (descricao, valor, tipo, referencia_pedido) VALUES (?, ?, ?, ?)',
+        [`Venda #${pedido}`, valor_total, 'entrada', pedido]
       );
     } catch (caixaError) {
-      // Logar o erro, mas não reverter a venda, pois a venda já foi confirmada.
-      // Isso indica um problema APENAS com o registro no caixa, não na venda em si.
-      console.error(
-        "Atenção: Erro ao registrar movimentação de caixa para a venda:",
-        pedido,
-        caixaError
-      );
-      // Você pode considerar uma fila de mensagens ou um mecanismo de re-tentativa para lidar com isso em um sistema de produção.
+      console.error('Atenção: Erro ao registrar movimentação de caixa para a venda:', pedido, caixaError);
     }
-    res
-      .status(201)
-      .json({ message: "Venda realizada com sucesso!", pedido: pedido });
+
+    res.status(201).json({ message: 'Venda realizada com sucesso!', pedido: pedido });
+
   } catch (error) {
-    // Se algo deu errado, desfaz todas as operações da transação
     await connection.rollback();
-    console.error("Erro ao realizar venda:", error);
-    res
-      .status(500)
-      .json({ message: "Erro ao realizar venda.", error: error.message });
+    console.error('Erro ao realizar venda:', error);
+    res.status(500).json({ message: 'Erro ao realizar venda.', error: error.message });
   } finally {
-    // Sempre libere a conexão de volta ao pool, mesmo em caso de erro
     connection.release();
   }
 });
 
 // Rota para LISTAR todas as vendas (READ ALL)
-router.get("/",authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+router.get('/', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT * FROM vendas");
+    // Incluir o codigo_barras do vendedor na listagem de vendas
+    const [rows] = await db.query(`
+        SELECT v.*, f.codigo_barras AS codigo_barras_vendedor
+        FROM vendas v
+        LEFT JOIN funcionarios f ON v.vendedor_id = f.id
+        ORDER BY v.data_venda DESC
+    `);
     res.status(200).json(rows);
   } catch (error) {
-    console.error("Erro ao buscar vendas:", error);
-    res
-      .status(500)
-      .json({
-        message: "Erro interno do servidor ao buscar vendas.",
-        error: error.message,
-      });
+    console.error('Erro ao buscar vendas:', error);
+    res.status(500).json({ message: 'Erro interno do servidor ao buscar vendas.', error: error.message });
   }
 });
 
 // Rota para OBTER os detalhes de uma venda por ID (READ ONE)
-router.get("/:id",authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+router.get('/:id', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
   const { id } = req.params;
 
   try {
-    const [vendaRows] = await db.query("SELECT * FROM vendas WHERE id = ?", [
-      id,
-    ]);
+    // Incluir o codigo_barras do vendedor nos detalhes da venda
+    const [vendaRows] = await db.query(`
+        SELECT v.*, f.codigo_barras AS codigo_barras_vendedor
+        FROM vendas v
+        LEFT JOIN funcionarios f ON v.vendedor_id = f.id
+        WHERE v.id = ?
+    `, [id]);
     const venda = vendaRows[0];
     if (!venda) {
-      return res.status(404).json({ message: "Venda não encontrada." });
+      return res.status(404).json({ message: 'Venda não encontrada.' });
     }
 
-    // Busca os itens de venda associados
-    const [itensRows] = await db.query(
-      `
-      SELECT 
-        iv.*, p.nome, p.codigo_barras, p.categoria 
+    const [itensRows] = await db.query(`
+      SELECT
+        iv.*, p.codigo_barras, p.codigo_barras, p.categoria, p.codigo_referencia
       FROM itens_venda iv
-      JOIN produtos p ON iv.codigo_barras = p.codigo_barras
+      JOIN produtos p ON iv.codigo_barras = p.id
       WHERE iv.pedido = ?
-    `,
-      [id]
-    );
+    `, [id]);
 
-    // Anexa os itens de venda ao objeto principal da venda
     venda.itens = itensRows;
 
     res.status(200).json(venda);
+
   } catch (error) {
-    console.error("Erro ao buscar detalhes da venda:", error);
-    res
-      .status(500)
-      .json({
-        message: "Erro interno do servidor ao buscar detalhes da venda.",
-        error: error.message,
-      });
+    console.error('Erro ao buscar detalhes da venda:', error);
+    res.status(500).json({ message: 'Erro interno do servidor ao buscar detalhes da venda.', error: error.message });
   }
 });
 
-// GET /vendas/:pedido/detalhes
-router.get('/:pedido/detalhes',authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
-  const { pedido } = req.params;
+module.exports = router;*/
 
-  try {
-    const [itensRows] = await db.query(`
-      SELECT
-        iv.codigo_barras,
-        iv.quantidade,
-        iv.preco_unitario,
-        iv.subtotal,
-        p.nome AS nome_produto,
-        p.categoria
-      FROM itens_venda iv
-      JOIN produtos p ON iv.codigo_barras = p.codigo_barras
-      WHERE iv.pedido = ?
-    `, [pedido]);
+// routes/vendas.js
+const express = require('express');
+const router = express.Router();
+const db = require('../config/db');
+const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware');
 
-    if (itensRows.length === 0) {
-      return res.status(404).json({ message: 'Nenhum item encontrado para este pedido.' });
+// Rota para ABRIR um novo pedido de venda (CREATE)
+// Apenas cria o registro inicial da venda sem mexer no estoque ou caixa
+router.post('/', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+    const { cliente_nome} = req.body;
+    const vendedorId = req.user.id;
+  
+    if (!cliente_nome) {
+        return res.status(400).json({ message: 'Nome do cliente é obrigatório.' });
     }
+  
+    try {
+        const [result] = await db.query(
+            'INSERT INTO vendas (cliente_nome, vendedor_id, valor_total, status_pedido) VALUES (?, ?, ?, ?)',
+            [cliente_nome, vendedorId, 0, 'Aberto'] // Começa com valor_total 0 e status 'Aberto'
+        );
+        const pedido = result.insertId;
+  
+        res.status(201).json({ message: 'Pedido aberto com sucesso!', pedido: pedido });
+    } catch (error) {
+        console.error('Erro ao abrir pedido de venda:', error);
+        res.status(500).json({ message: 'Erro interno do servidor ao abrir pedido de venda.', error: error.message });
+    }
+});
 
-    const itens = itensRows.map(item => ({
-      codigo_barras: item.codigo_barras,
-      nome_produto: item.nome_produto,
-      categoria: item.categoria,
-      quantidade: item.quantidade,
-      preco_unitario: item.preco_unitario,
-      subtotal: item.subtotal
-    }));
+// Rota para ADICIONAR ITENS a um pedido aberto
+router.put('/:pedido/itens', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+    const { pedido } = req.params;
+    const { itens } = req.body;
+  
+    if (!Array.isArray(itens) || itens.length === 0) {
+        return res.status(400).json({ message: 'A requisição deve conter pelo menos um item.' });
+    }
+  
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+  
+        // 1. Verifica se o pedido existe e está 'Aberto'
+        const [vendaRows] = await connection.query('SELECT status_pedido FROM vendas WHERE pedido = ? FOR UPDATE', [pedido]);
+        const venda = vendaRows[0];
+  
+        if (!venda) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'Pedido não encontrado.' });
+        }
+        if (venda.status_pedido !== 'Aberto') {
+            await connection.rollback();
+            return res.status(400).json({ message: `Não é possível alterar itens de um pedido com status '${venda.status_pedido}'.` });
+        }
+  
+        // 2. Limpa os itens existentes e o valor_total para recalcular
+        await connection.query('DELETE FROM itens_venda WHERE pedido = ?', [pedido]);
+        let novoValorTotal = 0;
+  
+        // 3. Adiciona os novos itens e recalcula o valor total
+        for (const item of itens) {
+            const { codigo_barras, quantidade } = item;
+  
+            if (quantidade <= 0) {
+                await connection.rollback();
+                throw new Error(`A quantidade do produto ${codigo_barras} deve ser maior que zero.`);
+            }
+  
+            const [produtoRows] = await connection.query('SELECT preco_venda FROM produtos WHERE codigo_barras = ?', [codigo_barras]);
+            const produto = produtoRows[0];
+  
+            if (!produto) {
+                await connection.rollback();
+                throw new Error(`Produto com codigo_barras ${codigo_barras} não encontrado.`);
+            }
+  
+            const preco_unitario = produto.preco_venda;
+            const subtotal = preco_unitario * quantidade;
+            novoValorTotal += subtotal;
+  
+            await connection.query(
+                'INSERT INTO itens_venda (pedido, codigo_barras, quantidade, preco_unitario, subtotal) VALUES (?, ?, ?, ?, ?)',
+                [pedido, codigo_barras, quantidade, preco_unitario, subtotal]
+            );
+        }
+  
+        // 4. Atualiza o valor_total na tabela de vendas
+        await connection.query('UPDATE vendas SET valor_total = ? WHERE pedido = ?', [novoValorTotal, pedido]);
+  
+        await connection.commit();
+        res.status(200).json({ message: 'Itens do pedido atualizados com sucesso!', valor_total: novoValorTotal });
+    } catch (error) {
+        await connection.rollback();
+        console.error('Erro ao atualizar itens do pedido:', error);
+        res.status(500).json({ message: 'Erro ao atualizar itens do pedido.', error: error.message });
+    } finally {
+        connection.release();
+    }
+});
 
-    res.status(200).json({ pedido, itens });
-  } catch (error) {
-    console.error('Erro ao buscar detalhes do pedido:', error);
-    res.status(500).json({ message: 'Erro interno ao buscar itens do pedido.', error: error.message });
-  }
+// Rota para FECHAR um pedido de venda (ATUALIZA ESTOQUE E CAIXA)
+router.put('/:pedido/fechar', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+    const { pedido } = req.params;
+    const { forma_pagamento, parcelas } = req.body; // Pega forma_pagamento e parcelas do corpo da requisição
+ 
+    if (!forma_pagamento) {
+      return res.status(400).json({ message: 'A forma de pagamento é obrigatória para fechar o pedido.' });
+    }
+ 
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+ 
+        // 1. Busca o pedido e seus itens com FOR UPDATE para bloquear
+        const [vendaRows] = await connection.query('SELECT * FROM vendas WHERE pedido = ? FOR UPDATE', [pedido]);
+        const venda = vendaRows[0];
+ 
+        if (!venda) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'Pedido não encontrado.' });
+        }
+        if (venda.status_pedido !== 'Aberto') {
+            await connection.rollback();
+            return res.status(400).json({ message: `O pedido já está com status '${venda.status_pedido}'.` });
+        }
+ 
+        const [itensRows] = await connection.query('SELECT * FROM itens_venda WHERE pedido = ?', [pedido]);
+        if (itensRows.length === 0) {
+            await connection.rollback();
+            return res.status(400).json({ message: 'Não é possível fechar um pedido sem itens.' });
+        }
+ 
+        // 2. Verifica o estoque antes de fechar a venda
+        for (const item of itensRows) {
+            const [produtoRows] = await connection.query('SELECT quantidade FROM produtos WHERE codigo_barras = ?', [item.codigo_barras]);
+            const produto = produtoRows[0];
+            if (produto.quantidade < item.quantidade) {
+                await connection.rollback();
+                return res.status(400).json({ message: `Estoque insuficiente para o produto com codigo_barras ${item.codigo_barras}.` });
+            }
+        }
+ 
+        // 3. Dá baixa no estoque e altera o status da venda e a forma de pagamento
+        for (const item of itensRows) {
+            await connection.query('UPDATE produtos SET quantidade = quantidade - ? WHERE codigo_barras = ?', [item.quantidade, item.codigo_barras]);
+        }
+        await connection.query('UPDATE vendas SET status_pedido = ?, forma_pagamento = ?, parcelas = ?, status_pagamento = ? WHERE pedido = ?', ['Concluída', forma_pagamento, parcelas || 1,'Pago', pedido]);
+ 
+        // 4. Lógica para PAGAMENTO PARCELADO vs. PAGAMENTO À VISTA
+        const valor_total = venda.valor_total;
+        
+        if (parcelas > 1) {
+            const valor_parcela = valor_total / parcelas;
+            for (let i = 1; i <= parcelas; i++) {
+                const data_vencimento = new Date();
+                data_vencimento.setDate(data_vencimento.getDate() + (i * 30));
+ 
+                await connection.query(
+                    'INSERT INTO pagamentos_parcelados (pedido, numero_parcela, valor_parcela, data_vencimento, status_pagamento) VALUES (?, ?, ?, ?, ?)',
+                    [pedido, i, valor_parcela, data_vencimento, 'Pendente']
+                );
+            }
+            res.status(200).json({ message: 'Pedido fechado com sucesso! Plano de pagamento parcelado criado.', vendaId: pedido });
+ 
+        } else { // Pagamento à vista (lógica original)
+            try {
+                await connection.query(
+                    'INSERT INTO movimentacoes_caixa (descricao, valor, tipo, referencia_venda_id) VALUES (?, ?, ?, ?)',
+                    [`Venda #${pedido} (Concluída)`, valor_total, 'entrada', pedido]
+                );
+            } catch (caixaError) {
+                console.error('Atenção: Erro ao registrar movimentação de caixa para a venda:', pedido, caixaError);
+            }
+            res.status(200).json({ message: 'Venda fechada com sucesso!', vendaId: pedido });
+        }
+ 
+        await connection.commit();
+    } catch (error) {
+        await connection.rollback();
+        console.error('Erro ao fechar pedido de venda:', error);
+        res.status(500).json({ message: 'Erro ao fechar pedido de venda.', error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
+// Rota para CANCELAR um pedido de venda (pode ser um pedido aberto ou já concluído)
+router.put('/:pedido/cancelar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
+    const { pedido } = req.params;
+  
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+  
+        const [vendaRows] = await connection.query('SELECT status_pedido, valor_total FROM vendas WHERE pedido = ? FOR UPDATE', [pedido]);
+        const venda = vendaRows[0];
+  
+        if (!venda) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'Pedido não encontrado.' });
+        }
+  
+        // Se o pedido já estiver cancelado ou estornado, não faz nada
+        if (venda.status_pedido === 'Cancelado' || venda.status_pedido === 'Estornado') {
+            await connection.rollback();
+            return res.status(400).json({ message: `O pedido já está com status '${venda.status_pedido}'.` });
+        }
+  
+        // Se o pedido estiver concluído, precisamos reverter o estoque e o caixa
+        if (venda.status_pedido === 'Concluído') {
+            const [itensRows] = await connection.query('SELECT * FROM itens_venda WHERE pedido = ?', [pedido]);
+  
+            if (itensRows.length > 0) {
+                // 1. Devolve os produtos ao estoque
+                for (const item of itensRows) {
+                    await connection.query('UPDATE produtos SET quantidade = quantidade + ? WHERE codigo_barras = ?', [item.quantidade, item.codigo_barras]);
+                }
+  
+                // 2. Lança uma movimentação de caixa de "estorno"
+                try {
+                    await connection.query(
+                        'INSERT INTO movimentacoes_caixa (descricao, valor_venda, tipo, referencia_venda_id) VALUES (?, ?, ?, ?)',
+                        [`Estorno do pedido #${pedido}`, venda.valor_total, 'estorno', pedido]
+                    );
+                } catch (caixaError) {
+                    console.error('Atenção: Erro ao registrar estorno de caixa para a venda:', id, caixaError);
+                }
+            }
+  
+            // 3. Atualiza o status para 'Estornado'
+            await connection.query('UPDATE vendas SET status_pedido = ? WHERE pedido = ?', ['Estornado', pedido]);
+            res.status(200).json({ message: 'Venda estornada e cancelada com sucesso! O estoque foi ajustado e um estorno de caixa foi lançado.', vendaId: pedido });
+  
+        } else { // Se o pedido estiver 'Aberto'
+            // Apenas altera o status para 'Cancelado' sem mexer em estoque ou caixa
+            await connection.query('UPDATE vendas SET status_pedido = ? WHERE pedido = ?', ['Cancelada', pedido]);
+            res.status(200).json({ message: 'Pedido cancelado com sucesso!', vendaId: pedido });
+        }
+  
+        await connection.commit();
+    } catch (error) {
+        await connection.rollback();
+        console.error('Erro ao cancelar pedido de venda:', error);
+        res.status(500).json({ message: 'Erro ao cancelar pedido de venda.', error: error.message });
+    } finally {
+        connection.release();
+    }
 });
 
 module.exports = router;

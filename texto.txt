@@ -1,17 +1,33 @@
 Para fazer usar qualquer rota colocar a url que deseja, ir em 'Headers' adicionar 'Authorization' e 'Bearer token....'
 
+Vendas
 
-Post venda
-
+Post / http://localhost:3000/vendas
+(Apenas abre o pedido)
 {
-  "cliente_nome":"Outra Empresa Ltda.", 
-  "forma_pagamento": "Cartão de Crédito",
+    "cliente_nome":"Supermercado São João"
+}
+
+Put / http://localhost:3000/vendas/23/itens
+(Para adicionar itens)
+{
   "itens": [
     {
-      "codigo_barras": 1234567890124, 
-      "quantidade": 2 
+      "codigo_barras": 1234567890124,
+      "quantidade": 2
+    },
+    {
+      "codigo_barras": 7891234567111,
+      "quantidade": 1
     }
   ]
+}
+
+Put  / http://localhost:3000/vendas/23/fechar
+(Para fevhar o pedido)
+{
+  "forma_pagamento": "Dinheiro",
+  "parcelas": 1
 }
 
 Post caixa 
@@ -89,11 +105,12 @@ adicionar um cadastro de funcionarios. - ok
 verificar os pontos, hífens e barras em cpf e cnpj na hora do cadastro - ok
 trocar as rotas, e deixar igual ao get,put e delete de produtos - ok 
 ver se é viavel tirar o slug - ok 
-
-adicionar um vinculo entre venda e vendedor, para o caso de comissão.
+adicionar um vinculo entre venda e vendedor, para o caso de comissão. ok
+adicionar o cliente e vendedor ao get de pedidos - http://localhost:3000/vendas/15/detalhes. ok
 adicionar uma abertura de pedidos para possiveis mudanças.
-adicionar o cliente e vendedor ao get de pedidos - http://localhost:3000/vendas/15/detalhes.
+
 adicionar responsavel pelo cadastro funcionarios, clientes e produtos.
+oeganizar e decidir o que ira aparecer nos relatorios - 
 
 1. Relatórios de Caixa e Vendas (Visão Geral) - ok
 2. Autenticação e Autorização de Usuários - ok
