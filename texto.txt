@@ -107,10 +107,11 @@ trocar as rotas, e deixar igual ao get,put e delete de produtos - ok
 ver se é viavel tirar o slug - ok 
 adicionar um vinculo entre venda e vendedor, para o caso de comissão. ok
 adicionar o cliente e vendedor ao get de pedidos - http://localhost:3000/vendas/15/detalhes. ok
-adicionar uma abertura de pedidos para possiveis mudanças.
+adicionar uma abertura de pedidos para possiveis mudanças. ok 
 
+testar rota de vendas
 adicionar responsavel pelo cadastro funcionarios, clientes e produtos.
-oeganizar e decidir o que ira aparecer nos relatorios - 
+oeganizar e decidir o que irá aparecer nos relatorios - 
 
 1. Relatórios de Caixa e Vendas (Visão Geral) - ok
 2. Autenticação e Autorização de Usuários - ok
