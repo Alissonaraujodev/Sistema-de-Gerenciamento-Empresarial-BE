@@ -73,7 +73,7 @@ router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vend
   const { identificador } = req.params;
 
   let sql = `
-    SELECT cnpj, cliente_nome, slug, email, telefone, logradouro, numero, complemento, bairro,
+    SELECT cnpj, cliente_nome, email, telefone, logradouro, numero, complemento, bairro,
            cidade, estado, cep, data_cadastro
     FROM clientes
     `;
@@ -107,7 +107,7 @@ router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vend
 
 router.put('/:identificador', authenticateToken, authorizeRole(['Gerente']), async (req, res) => {
   const { identificador } = req.params;
-  const { cnpj, cliente_nome, slug, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep } = req.body;
+  const { cnpj, cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep } = req.body;
 
   if (!cnpj || !cliente_nome || !email  || telefone === undefined || logradouro === undefined || numero === undefined || complemento === undefined || bairro === undefined || cidade === undefined || estado === undefined || cep === undefined) {
     return res.status(400).json({ message: 'Todos os campos são obrigatórios.' });
@@ -128,10 +128,10 @@ router.put('/:identificador', authenticateToken, authorizeRole(['Gerente']), asy
 
     const sql = `
       UPDATE clientes 
-      SET cnpj = ?, cliente_nome = ?, slug = ?, email = ?, telefone = ?, logradouro = ?, numero = ?, complemento = ?, bairro = ?, cidade =? , estado = ?, cep = ?
+      SET cnpj = ?, cliente_nome = ?, email = ?, telefone = ?, logradouro = ?, numero = ?, complemento = ?, bairro = ?, cidade =? , estado = ?, cep = ?
       WHERE cnpj = ?
     `;
-    const values = [cnpj, cliente_nome, slug, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep, clienteCnpj];
+    const values = [cnpj, cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep, clienteCnpj];
 
     const [result] = await db.query(sql, values);
 
@@ -184,16 +184,14 @@ router.delete('/:identificador', authenticateToken, authorizeRole(['Gerente']), 
   }
 });
 
-
 // Rota para GERAR RELATÓRIO de cliente com vendas
-
 router.get('/:nome/relatorio', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
   const { nome } = req.params;
 
   try {
-    // 1. Busca o cliente pelo nome (parcial e insensível a maiúsculas)
+    // 1. Busca o cliente
     const [clienteRows] = await db.query(`
-      SELECT cnpj, cliente_nome, slug, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep, data_cadastro
+      SELECT cnpj, cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep, data_cadastro
       FROM clientes
       WHERE LOWER(cliente_nome) LIKE LOWER(?)
       LIMIT 1
@@ -204,16 +202,15 @@ router.get('/:nome/relatorio', authenticateToken, authorizeRole(['Gerente', 'Cai
     }
 
     const cliente = clienteRows[0];
-
-    // 2. Monta o endereço completo
     const enderecoCompleto = `${cliente.logradouro}, ${cliente.numero}${cliente.complemento ? `, ${cliente.complemento}` : ''}, ${cliente.bairro}, ${cliente.cidade} - ${cliente.estado}, ${cliente.cep}`;
 
-    // 3. Busca as vendas do cliente (nome parcial e case-insensitive)
+    // 2. Busca as vendas do cliente com valor_total e valor_pago
     const [vendasRows] = await db.query(`
       SELECT
         v.pedido AS venda_id,
         v.data_venda,
         v.valor_total,
+        v.valor_pago, -- precisa existir essa coluna no banco
         v.forma_pagamento,
         v.status_pedido,
         v.status_pagamento,
@@ -222,26 +219,45 @@ router.get('/:nome/relatorio', authenticateToken, authorizeRole(['Gerente', 'Cai
         mc.valor AS valor_movimentacao_caixa,
         mc.data_movimentacao AS data_movimentacao_caixa
       FROM vendas v
-      LEFT JOIN movimentacoes_caixa mc ON v.pedido = mc.referencia_venda_id AND mc.tipo = 'entrada'
+      LEFT JOIN movimentacoes_caixa mc 
+        ON v.pedido = mc.referencia_venda_id AND mc.tipo = 'entrada'
       WHERE LOWER(v.cliente_nome) LIKE LOWER(?)
       ORDER BY v.data_venda DESC
     `, [`%${nome}%`]);
 
+    // 3. Resumo das vendas
     const vendasResumo = vendasRows.map(venda => ({
       pedido: venda.venda_id,
-      status_pagamento: venda.status_pagamento
+      status_pagamento: venda.status_pagamento,
+      status_pedido: venda.status_pedido,
+      valor_total: venda.valor_total,
+      valor_pago: venda.valor_pago || 0
     }));
 
-    // 4. Monta o relatório final
+    // Filtra somente pedidos que contam para o financeiro
+    const pedidosValidos = vendasResumo.filter(v =>
+      v.status_pedido === 'Aberto' || v.status_pedido === 'Concluída'
+    );
+
+    // Faz as somas usando apenas os pedidos válidos
+    const valor_total_pedidos = pedidosValidos.reduce((sum, v) => sum + Number(v.valor_total || 0), 0);
+    const valor_total_pago = pedidosValidos.reduce((sum, v) => sum + Number(v.valor_pago || 0), 0);
+    const valor_faltante = valor_total_pedidos - valor_total_pago;
+
+    // 5. Monta o relatório final
     const relatorioCliente = {
       cliente: {
         cnpj: cliente.cnpj,
         cliente_nome: cliente.cliente_nome,
-        slug: cliente.slug,
         email: cliente.email,
         telefone: cliente.telefone,
         endereco: enderecoCompleto,
         data_cadastro: cliente.data_cadastro
+      },
+      resumo_financeiro: {
+        valor_total_pedidos,
+        valor_total_pago,
+        valor_faltante
       },
       vendas: vendasResumo
     };

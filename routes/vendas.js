@@ -33,13 +33,10 @@ router.post('/', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa
     }
 });
 /*
-// Rota para ADICIONAR ITENS a um pedido aberto
-router.put('/:itens', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
-    const {pedido, itens } = req.body;
-
-    if (!pedido) {
-        return res.status(400).json({ message: 'A requisição deve conter o número do pedido.' });
-    }
+// Rota para ADICIONAR ITENS a um pedido aberto (agora com itens personalizados)
+router.put('/:pedido/itens', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+    const { pedido } = req.params;
+    const { itens } = req.body;
 
     if (!Array.isArray(itens) || itens.length === 0) {
         return res.status(400).json({ message: 'A requisição deve conter pelo menos um item.' });
@@ -50,7 +47,7 @@ router.put('/:itens', authenticateToken, authorizeRole(['Gerente', 'Vendedor', '
         await connection.beginTransaction();
 
         // 1. Verifica se o pedido existe e está 'Aberto'
-        const [vendaRows] = await connection.query('SELECT status_pedido FROM vendas WHERE pedido = ? FOR UPDATE', [pedido]);
+        const [vendaRows] = await connection.query('SELECT status_pedido, autorizacao_edicao FROM vendas WHERE pedido = ? FOR UPDATE', [pedido]);
         const venda = vendaRows[0];
 
         if (!venda) {
@@ -62,85 +59,32 @@ router.put('/:itens', authenticateToken, authorizeRole(['Gerente', 'Vendedor', '
             return res.status(400).json({ message: `Não é possível alterar itens de um pedido com status '${venda.status_pedido}'.` });
         }
 
-        // 2. Limpa os itens existentes e o valor_total para recalcular
-        await connection.query('DELETE FROM itens_venda WHERE pedido = ?', [pedido]);
-        let novoValorTotal = 0;
+        const [itensExistentes] = await connection.query(
+            'SELECT COUNT(*) AS total FROM itens_venda WHERE pedido = ?',
+            [pedido]
+        );
 
-        // 3. Adiciona os novos itens e recalcula o valor total
-        for (const item of itens) {
-            const { codigo_barras, quantidade } = item;
-
-            if (quantidade <= 0) {
+        //verifica se ja foi adicionado algum item no pedido
+        if (itensExistentes[0].total > 0 && req.user.role === 'Vendedor') {
+            if (venda.autorizacao_edicao !== 1) {
                 await connection.rollback();
-                throw new Error(`A quantidade do produto ${codigo_barras} deve ser maior que zero.`);
+                return res.status(403).json({ message: 'Necessário liberação de Gerente ou Caixa para editar este pedido novamente.' });
             }
 
-            const [produtoRows] = await connection.query('SELECT preco_venda FROM produtos WHERE codigo_barras = ?', [codigo_barras]);
-            const produto = produtoRows[0];
-
-            if (!produto) {
-                await connection.rollback();
-                throw new Error(`Produto com codigo_barras ${codigo_barras} não encontrado.`);
-            }
-
-            const preco_unitario = produto.preco_venda;
-            const subtotal = preco_unitario * quantidade;
-            novoValorTotal += subtotal;
-
+         // Reseta a autorização após uso
             await connection.query(
-                'INSERT INTO itens_venda (pedido, codigo_barras, quantidade, preco_unitario, subtotal) VALUES (?, ?, ?, ?, ?)',
-                [pedido, codigo_barras, quantidade, preco_unitario, subtotal]
+                'UPDATE vendas SET autorizacao_edicao = 0 WHERE pedido = ?',
+                [pedido]
             );
         }
 
-        // 4. Atualiza o valor_total na tabela de vendas
-        await connection.query('UPDATE vendas SET valor_total = ? WHERE pedido = ?', [novoValorTotal, pedido]);
-
-        await connection.commit();
-        res.status(200).json({ message: 'Itens do pedido atualizados com sucesso!', valor_total: novoValorTotal });
-    } catch (error) {
-        await connection.rollback();
-        console.error('Erro ao atualizar itens do pedido:', error);
-        res.status(500).json({ message: 'Erro ao atualizar itens do pedido.', error: error.message });
-    } finally {
-        connection.release();
-    }
-});*/
-
-// Rota para ADICIONAR ITENS a um pedido aberto
-router.put('/:itens', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
-    const { pedido, itens } = req.body;
-
-    if (!pedido) {
-        return res.status(400).json({ message: 'A requisição deve conter o número do pedido.' });
-    }
-
-    if (!Array.isArray(itens) || itens.length === 0) {
-        return res.status(400).json({ message: 'A requisição deve conter pelo menos um item.' });
-    }
-
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-
-        // 1. Verifica se o pedido existe e está 'Aberto'
-        const [vendaRows] = await connection.query('SELECT status_pedido FROM vendas WHERE pedido = ? FOR UPDATE', [pedido]);
-        const venda = vendaRows[0];
-
-        if (!venda) {
-            await connection.rollback();
-            return res.status(404).json({ message: 'Pedido não encontrado.' });
-        }
-        if (venda.status_pedido !== 'Aberto') {
-            await connection.rollback();
-            return res.status(400).json({ message: `Não é possível alterar itens de um pedido com status '${venda.status_pedido}'.` });
-        }
-
-        // 2. Antes de atualizar, devolve ao estoque os itens antigos (se existirem)
-        // Isso previne erros caso o pedido seja atualizado com novos itens.
+        // 2. Devolve ao estoque os itens antigos (somente os do tipo 'padrao')
         const [itensAntigos] = await connection.query('SELECT codigo_barras, quantidade FROM itens_venda WHERE pedido = ?', [pedido]);
         for (const itemAntigo of itensAntigos) {
-            await connection.query('UPDATE produtos SET quantidade = quantidade + ? WHERE codigo_barras = ?', [itemAntigo.quantidade, itemAntigo.codigo_barras]);
+            const [produtoAntigoRows] = await connection.query('SELECT tipo_produto FROM produtos WHERE codigo_barras = ?', [itemAntigo.codigo_barras]);
+            if (produtoAntigoRows.length > 0 && produtoAntigoRows[0].tipo_produto === 'padrao') {
+                await connection.query('UPDATE produtos SET quantidade = quantidade + ? WHERE codigo_barras = ?', [itemAntigo.quantidade, itemAntigo.codigo_barras]);
+            }
         }
 
         // 3. Limpa os itens existentes do pedido
@@ -149,38 +93,48 @@ router.put('/:itens', authenticateToken, authorizeRole(['Gerente', 'Vendedor', '
 
         // 4. Adiciona os novos itens, decrementa o estoque e recalcula o valor total
         for (const item of itens) {
-            const { codigo_barras, quantidade } = item;
+            const { codigo_barras, quantidade, largura, altura } = item;
 
             if (quantidade <= 0) {
                 await connection.rollback();
-                throw new Error(`A quantidade do produto ${codigo_barras} deve ser maior que zero.`);
+                throw new Error(`A quantidade do produto deve ser maior que zero.`);
             }
 
-            const [produtoRows] = await connection.query('SELECT nome, preco_venda, quantidade FROM produtos WHERE codigo_barras = ?', [codigo_barras]);
+            const [produtoRows] = await connection.query('SELECT nome, preco_venda, quantidade, tipo_produto FROM produtos WHERE codigo_barras = ?', [codigo_barras]);
             const produto = produtoRows[0];
 
             if (!produto) {
                 await connection.rollback();
-                throw new Error(`Produto com codigo_barras ${codigo_barras} não encontrado.`);
-            }
-            // Verifica se há estoque suficiente
-            if (produto.quantidade < quantidade) {
-                await connection.rollback();
-                throw new Error(`Estoque insuficiente para o produto ${produto.nome}. Disponível: ${produto.quantidade_estoque}`);
+                throw new Error(`Produto com codigo de barras ${codigo_barras} não encontrado.`);
             }
 
             const preco_unitario = produto.preco_venda;
-            const subtotal = preco_unitario * quantidade;
+            let subtotal = 0;
+            
+            // Lógica para itens PADRÃO (com estoque)
+            if (produto.tipo_produto === 'padrao') {
+                if (produto.quantidade < quantidade) {
+                    await connection.rollback();
+                    throw new Error(`Estoque insuficiente para o produto ${produto.nome}. Disponível: ${produto.quantidade}`);
+                }
+                subtotal = preco_unitario * quantidade;
+                await connection.query('UPDATE produtos SET quantidade = quantidade - ? WHERE codigo_barras = ?', [quantidade, codigo_barras]);
+            }
+            // Lógica para itens PERSONALIZADOS (sem estoque, com largura/altura)
+            else if (produto.tipo_produto === 'personalizado') {
+                if (!largura || !altura) {
+                    await connection.rollback();
+                    throw new Error(`Largura e altura são obrigatórios para o produto personalizado '${produto.nome}'.`);
+                }
+                subtotal = preco_unitario * largura * altura;
+            }
+
             novoValorTotal += subtotal;
 
-            // Insere o novo item na tabela 'itens_venda'
             await connection.query(
-                'INSERT INTO itens_venda (pedido, codigo_barras, quantidade, preco_unitario, subtotal) VALUES (?, ?, ?, ?, ?)',
-                [pedido, codigo_barras, quantidade, preco_unitario, subtotal]
+                'INSERT INTO itens_venda (pedido, codigo_barras, quantidade, preco_unitario, subtotal, largura, altura) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [pedido, codigo_barras, quantidade, preco_unitario, subtotal, largura, altura]
             );
-
-            // Decrementa o estoque do produto
-            await connection.query('UPDATE produtos SET quantidade = quantidade - ? WHERE codigo_barras = ?', [quantidade, codigo_barras]);
         }
 
         // 5. Atualiza o valor_total na tabela de vendas
@@ -196,16 +150,519 @@ router.put('/:itens', authenticateToken, authorizeRole(['Gerente', 'Vendedor', '
         connection.release();
     }
 });
+*/
+/*
+router.put('/:pedido/itens', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+    const { pedido } = req.params;
+    const { itens } = req.body;
+
+    if (!Array.isArray(itens) || itens.length === 0) {
+        return res.status(400).json({ message: 'A requisição deve conter pelo menos um item.' });
+    }
+
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // 1. Verifica se o pedido existe, está 'Aberto' e busca autorizacao_edicao
+        const [vendaRows] = await connection.query(
+            'SELECT status_pedido, autorizacao_edicao, edicao_feita FROM vendas WHERE pedido = ? FOR UPDATE',
+            [pedido]
+        );
+        const venda = vendaRows[0];
+
+        if (!venda) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'Pedido não encontrado.' });
+        }
+
+        if (venda.status_pedido !== 'Aberto') {
+            await connection.rollback();
+            return res.status(400).json({ message: `Não é possível alterar itens de um pedido com status '${venda.status_pedido}'.` });
+        }
+
+       // 1.1 Bloqueia se já houve edição sem liberação
+        if (req.user.role === 'Vendedor') {
+            if (venda.edicao_feita === 1 && venda.autorizacao_edicao !== 1) {
+                await connection.rollback();
+                return res.status(403).json({
+                    message: 'Necessário liberação de Gerente ou Caixa para editar este pedido novamente.'
+                });
+            }
+        }
+
+        // Depois de inserir os novos itens e atualizar o total, marca que o vendedor já usou a rota
+        if (req.user.role === 'Vendedor') {
+            await connection.query(
+                'UPDATE vendas SET edicao_feita = 1, autorizacao_edicao = 0 WHERE pedido = ?',
+                [pedido]
+            );
+        }
+
+        // 2. Devolve ao estoque os itens antigos (somente os do tipo 'padrao')
+        const [itensAntigos] = await connection.query('SELECT codigo_barras, quantidade FROM itens_venda WHERE pedido = ?', [pedido]);
+        for (const itemAntigo of itensAntigos) {
+            const [produtoAntigoRows] = await connection.query('SELECT tipo_produto FROM produtos WHERE codigo_barras = ?', [itemAntigo.codigo_barras]);
+            if (produtoAntigoRows.length > 0 && produtoAntigoRows[0].tipo_produto === 'padrao') {
+                await connection.query('UPDATE produtos SET quantidade = quantidade + ? WHERE codigo_barras = ?', [itemAntigo.quantidade, itemAntigo.codigo_barras]);
+            }
+        }
+
+        // 3. Limpa os itens existentes do pedido
+        await connection.query('DELETE FROM itens_venda WHERE pedido = ?', [pedido]);
+        let novoValorTotal = 0;
+
+        // 4. Adiciona os novos itens, decrementa o estoque e recalcula o valor total
+        for (const item of itens) {
+            const { codigo_barras, quantidade, largura, altura } = item;
+
+            if (quantidade <= 0) {
+                await connection.rollback();
+                throw new Error(`A quantidade do produto deve ser maior que zero.`);
+            }
+
+            const [produtoRows] = await connection.query('SELECT nome, preco_venda, quantidade, tipo_produto FROM produtos WHERE codigo_barras = ?', [codigo_barras]);
+            const produto = produtoRows[0];
+
+            if (!produto) {
+                await connection.rollback();
+                throw new Error(`Produto com codigo de barras ${codigo_barras} não encontrado.`);
+            }
+
+            const preco_unitario = produto.preco_venda;
+            let subtotal = 0;
+
+            // Itens PADRÃO
+            if (produto.tipo_produto === 'padrao') {
+                if (produto.quantidade < quantidade) {
+                    await connection.rollback();
+                    throw new Error(`Estoque insuficiente para o produto ${produto.nome}. Disponível: ${produto.quantidade}`);
+                }
+                subtotal = preco_unitario * quantidade;
+                await connection.query('UPDATE produtos SET quantidade = quantidade - ? WHERE codigo_barras = ?', [quantidade, codigo_barras]);
+            }
+            // Itens PERSONALIZADOS
+            else if (produto.tipo_produto === 'personalizado') {
+                if (!largura || !altura) {
+                    await connection.rollback();
+                    throw new Error(`Largura e altura são obrigatórios para o produto personalizado '${produto.nome}'.`);
+                }
+                subtotal = preco_unitario * largura * altura;
+            }
+
+            novoValorTotal += subtotal;
+
+            await connection.query(
+                'INSERT INTO itens_venda (pedido, codigo_barras, quantidade, preco_unitario, subtotal, largura, altura) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [pedido, codigo_barras, quantidade, preco_unitario, subtotal, largura, altura]
+            );
+        }
+
+        // 5. Atualiza o valor_total na tabela de vendas
+        await connection.query('UPDATE vendas SET valor_total = ? WHERE pedido = ?', [novoValorTotal, pedido]);
+
+        await connection.commit();
+        res.status(200).json({ message: 'Itens do pedido atualizados com sucesso!', valor_total: novoValorTotal });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error('Erro ao atualizar itens do pedido:', error);
+        res.status(500).json({ message: 'Erro ao atualizar itens do pedido.', error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+*/
+/*
+router.put('/:pedido/itens', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+    const { pedido } = req.params;
+    const { itens } = req.body;
+
+    if (!Array.isArray(itens) || itens.length === 0) {
+        return res.status(400).json({ message: 'A requisição deve conter pelo menos um item.' });
+    }
+
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // 1. Busca o pedido, status e flags
+        const [vendaRows] = await connection.query(
+            'SELECT status_pedido, autorizacao_edicao, edicao_feita FROM vendas WHERE pedido = ? FOR UPDATE',
+            [pedido]
+        );
+        const venda = vendaRows[0];
+
+        if (!venda) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'Pedido não encontrado.' });
+        }
+
+        if (venda.status_pedido !== 'Aberto') {
+            await connection.rollback();
+            return res.status(400).json({ message: `Não é possível alterar itens de um pedido com status '${venda.status_pedido}'.` });
+        }
+
+        // 2. Bloqueio para vendedores sem liberação
+        if (req.user.role === 'Vendedor') {
+            if (venda.edicao_feita === 1 && venda.autorizacao_edicao !== 1) {
+                await connection.rollback();
+                return res.status(403).json({
+                    message: 'Necessário liberação de Gerente ou Caixa para editar este pedido novamente.'
+                });
+            }
+        }
+
+
+
+        // 3. Devolve ao estoque os itens antigos (somente tipo "padrao")
+        const [itensAntigos] = await connection.query('SELECT codigo_barras, quantidade FROM itens_venda WHERE pedido = ?', [pedido]);
+        for (const itemAntigo of itensAntigos) {
+            const [produtoAntigoRows] = await connection.query('SELECT tipo_produto FROM produtos WHERE codigo_barras = ?', [itemAntigo.codigo_barras]);
+            if (produtoAntigoRows.length > 0 && produtoAntigoRows[0].tipo_produto === 'padrao') {
+                await connection.query('UPDATE produtos SET quantidade = quantidade + ? WHERE codigo_barras = ?', [itemAntigo.quantidade, itemAntigo.codigo_barras]);
+            }
+        }
+
+        // 4. Limpa os itens existentes
+        await connection.query('DELETE FROM itens_venda WHERE pedido = ?', [pedido]);
+        let novoValorTotal = 0;
+
+        // 5. Adiciona os novos itens
+        for (const item of itens) {
+            const { codigo_barras, quantidade, largura, altura } = item;
+
+            if (quantidade <= 0) {
+                await connection.rollback();
+                throw new Error(`A quantidade do produto deve ser maior que zero.`);
+            }
+
+            const [produtoRows] = await connection.query('SELECT nome, preco_venda, quantidade, tipo_produto FROM produtos WHERE codigo_barras = ?', [codigo_barras]);
+            const produto = produtoRows[0];
+
+            if (!produto) {
+                await connection.rollback();
+                throw new Error(`Produto com codigo de barras ${codigo_barras} não encontrado.`);
+            }
+
+            const preco_unitario = produto.preco_venda;
+            let subtotal = 0;
+
+            if (produto.tipo_produto === 'padrao') {
+                if (produto.quantidade < quantidade) {
+                    await connection.rollback();
+                    throw new Error(`Estoque insuficiente para o produto ${produto.nome}. Disponível: ${produto.quantidade}`);
+                }
+                subtotal = preco_unitario * quantidade;
+                await connection.query('UPDATE produtos SET quantidade = quantidade - ? WHERE codigo_barras = ?', [quantidade, codigo_barras]);
+            } else if (produto.tipo_produto === 'personalizado') {
+                if (!largura || !altura) {
+                    await connection.rollback();
+                    throw new Error(`Largura e altura são obrigatórios para o produto personalizado '${produto.nome}'.`);
+                }
+                subtotal = preco_unitario * largura * altura;
+            }
+
+            novoValorTotal += subtotal;
+
+            await connection.query(
+                'INSERT INTO itens_venda (pedido, codigo_barras, quantidade, preco_unitario, subtotal, largura, altura) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [pedido, codigo_barras, quantidade, preco_unitario, subtotal, largura, altura]
+            );
+        }
+
+        // 6. Atualiza o valor total da venda
+        await connection.query('UPDATE vendas SET valor_total = ? WHERE pedido = ?', [novoValorTotal, pedido]);
+
+        // 7. Marca que o vendedor já fez a edição, resetando a autorização
+        if (req.user.role === 'Vendedor') {
+            await connection.query(
+                'UPDATE vendas SET edicao_feita = 1, autorizacao_edicao = 0 WHERE pedido = ?',
+                [pedido]
+            );
+        }
+
+        await connection.commit();
+        res.status(200).json({ message: 'Itens do pedido atualizados com sucesso!', valor_total: novoValorTotal });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error('Erro ao atualizar itens do pedido:', error);
+        res.status(500).json({ message: 'Erro ao atualizar itens do pedido.', error: error.message });
+    } finally {
+        connection.release();
+    }
+});*/
+/*
+router.put('/:pedido/itens', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+    const { pedido } = req.params;
+    const { itens } = req.body;
+
+    if (!Array.isArray(itens) || itens.length === 0) {
+        return res.status(400).json({ message: 'A requisição deve conter pelo menos um item.' });
+    }
+
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // 1. Busca o pedido, status e flags
+        const [vendaRows] = await connection.query(
+            'SELECT status_pedido, autorizacao_edicao, edicao_feita FROM vendas WHERE pedido = ? FOR UPDATE',
+            [pedido]
+        );
+        const venda = vendaRows[0];
+
+        if (!venda) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'Pedido não encontrado.' });
+        }
+
+        if (venda.status_pedido !== 'Aberto') {
+            await connection.rollback();
+            return res.status(400).json({ message: `Não é possível alterar itens de um pedido com status '${venda.status_pedido}'.` });
+        }
+
+        // 2. Bloqueio para vendedores sem liberação
+        if (req.user.role === 'Vendedor') {
+            if (venda.edicao_feita === 1 && venda.autorizacao_edicao !== 1) {
+                await connection.rollback();
+                return res.status(403).json({
+                    message: 'Necessário liberação de Gerente ou Caixa para editar este pedido novamente.'
+                });
+            }
+        }
+
+        // 3. Devolve ao estoque os itens antigos (somente tipo "padrao")
+        const [itensAntigos] = await connection.query('SELECT codigo_barras, quantidade FROM itens_venda WHERE pedido = ?', [pedido]);
+        for (const itemAntigo of itensAntigos) {
+            const [produtoAntigoRows] = await connection.query('SELECT tipo_produto FROM produtos WHERE codigo_barras = ?', [itemAntigo.codigo_barras]);
+            if (produtoAntigoRows.length > 0 && produtoAntigoRows[0].tipo_produto === 'padrao') {
+                await connection.query('UPDATE produtos SET quantidade = quantidade + ? WHERE codigo_barras = ?', [itemAntigo.quantidade, itemAntigo.codigo_barras]);
+            }
+        }
+
+        // 4. Limpa os itens existentes
+        await connection.query('DELETE FROM itens_venda WHERE pedido = ?', [pedido]);
+        let novoValorTotal = 0;
+
+        // 5. Adiciona os novos itens
+        for (const item of itens) {
+            const { codigo_barras, quantidade, largura, altura } = item;
+
+            if (quantidade <= 0) {
+                await connection.rollback();
+                throw new Error(`A quantidade do produto deve ser maior que zero.`);
+            }
+
+            const [produtoRows] = await connection.query('SELECT nome, preco_venda, quantidade, tipo_produto FROM produtos WHERE codigo_barras = ?', [codigo_barras]);
+            const produto = produtoRows[0];
+
+            if (!produto) {
+                await connection.rollback();
+                throw new Error(`Produto com codigo de barras ${codigo_barras} não encontrado.`);
+            }
+
+            const preco_unitario = produto.preco_venda;
+            let subtotal = 0;
+
+            if (produto.tipo_produto === 'padrao') {
+                if (produto.quantidade < quantidade) {
+                    await connection.rollback();
+                    throw new Error(`Estoque insuficiente para o produto ${produto.nome}. Disponível: ${produto.quantidade}`);
+                }
+                subtotal = preco_unitario * quantidade;
+                await connection.query('UPDATE produtos SET quantidade = quantidade - ? WHERE codigo_barras = ?', [quantidade, codigo_barras]);
+            } else if (produto.tipo_produto === 'personalizado') {
+                if (!largura || !altura) {
+                    await connection.rollback();
+                    throw new Error(`Largura e altura são obrigatórios para o produto personalizado '${produto.nome}'.`);
+                }
+                subtotal = preco_unitario * largura * altura;
+            }
+
+            novoValorTotal += subtotal;
+
+            await connection.query(
+                'INSERT INTO itens_venda (pedido, codigo_barras, quantidade, preco_unitario, subtotal, largura, altura) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [pedido, codigo_barras, quantidade, preco_unitario, subtotal, largura, altura]
+            );
+        }
+
+        // 6. Atualiza o valor total da venda
+        await connection.query('UPDATE vendas SET valor_total = ? WHERE pedido = ?', [novoValorTotal, pedido]);
+
+        // 7. Marca que o vendedor já fez a edição e reseta a autorização
+        if (req.user.role === 'Vendedor') {
+            await connection.query(
+                'UPDATE vendas SET edicao_feita = 1, autorizacao_edicao = 0 WHERE pedido = ?',
+                [pedido]
+            );
+        }
+
+        await connection.commit();
+        res.status(200).json({ message: 'Itens do pedido atualizados com sucesso!', valor_total: novoValorTotal });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error('Erro ao atualizar itens do pedido:', error);
+        res.status(500).json({ message: 'Erro ao atualizar itens do pedido.', error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+*/
+
+router.put('/:pedido/itens', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+    const { pedido } = req.params;
+    const { itens } = req.body;
+
+    if (!Array.isArray(itens) || itens.length === 0) {
+        return res.status(400).json({ message: 'A requisição deve conter pelo menos um item.' });
+    }
+
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // 1. Busca o pedido, status e flags
+        const [vendaRows] = await connection.query(
+            'SELECT status_pedido, autorizacao_edicao, edicao_feita FROM vendas WHERE pedido = ? FOR UPDATE',
+            [pedido]
+        );
+        const venda = vendaRows[0];
+
+        if (!venda) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'Pedido não encontrado.' });
+        }
+
+        if (venda.status_pedido !== 'Aberto') {
+            await connection.rollback();
+            return res.status(400).json({ message: `Não é possível alterar itens de um pedido com status '${venda.status_pedido}'.` });
+        }
+
+        // 2. Bloqueio para vendedores sem liberação
+        if (req.user.role === 'Vendedor') {
+            if (venda.edicao_feita === 1 && venda.autorizacao_edicao !== 1) {
+                await connection.rollback();
+                return res.status(403).json({
+                    message: 'Necessário liberação de Gerente ou Caixa para editar este pedido novamente.'
+                });
+            }
+        }
+
+        // 3. Devolve ao estoque os itens antigos (somente tipo "padrao")
+        const [itensAntigos] = await connection.query('SELECT codigo_barras, quantidade FROM itens_venda WHERE pedido = ?', [pedido]);
+        for (const itemAntigo of itensAntigos) {
+            const [produtoAntigoRows] = await connection.query('SELECT tipo_produto FROM produtos WHERE codigo_barras = ?', [itemAntigo.codigo_barras]);
+            if (produtoAntigoRows.length > 0 && produtoAntigoRows[0].tipo_produto === 'padrao') {
+                await connection.query('UPDATE produtos SET quantidade = quantidade + ? WHERE codigo_barras = ?', [itemAntigo.quantidade, itemAntigo.codigo_barras]);
+            }
+        }
+
+        // 4. Limpa os itens existentes
+        await connection.query('DELETE FROM itens_venda WHERE pedido = ?', [pedido]);
+        let novoValorTotal = 0;
+
+        // 5. Adiciona os novos itens
+        for (const item of itens) {
+            const { codigo_barras, quantidade, largura, altura } = item;
+
+            if (quantidade <= 0) {
+                await connection.rollback();
+                throw new Error(`A quantidade do produto deve ser maior que zero.`);
+            }
+
+            const [produtoRows] = await connection.query('SELECT nome, preco_venda, quantidade, tipo_produto FROM produtos WHERE codigo_barras = ?', [codigo_barras]);
+            const produto = produtoRows[0];
+
+            if (!produto) {
+                await connection.rollback();
+                throw new Error(`Produto com codigo de barras ${codigo_barras} não encontrado.`);
+            }
+
+            const preco_unitario = produto.preco_venda;
+            let subtotal = 0;
+
+            if (produto.tipo_produto === 'padrao') {
+                if (produto.quantidade < quantidade) {
+                    await connection.rollback();
+                    throw new Error(`Estoque insuficiente para o produto ${produto.nome}. Disponível: ${produto.quantidade}`);
+                }
+                subtotal = preco_unitario * quantidade;
+                await connection.query('UPDATE produtos SET quantidade = quantidade - ? WHERE codigo_barras = ?', [quantidade, codigo_barras]);
+            } else if (produto.tipo_produto === 'personalizado') {
+                if (!largura || !altura) {
+                    await connection.rollback();
+                    throw new Error(`Largura e altura são obrigatórios para o produto personalizado '${produto.nome}'.`);
+                }
+                subtotal = preco_unitario * largura * altura;
+            }
+
+            novoValorTotal += subtotal;
+
+            await connection.query(
+                'INSERT INTO itens_venda (pedido, codigo_barras, quantidade, preco_unitario, subtotal, largura, altura) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [pedido, codigo_barras, quantidade, preco_unitario, subtotal, largura, altura]
+            );
+        }
+
+        // 6. Atualiza o valor total da venda
+        await connection.query('UPDATE vendas SET valor_total = ? WHERE pedido = ?', [novoValorTotal, pedido]);
+
+        // 7. Marca que o vendedor já fez a edição, resetando a autorização apenas agora
+        if (req.user.role === 'Vendedor') {
+            await connection.query(
+                'UPDATE vendas SET edicao_feita = 1, autorizacao_edicao = 0 WHERE pedido = ?',
+                [pedido]
+            );
+        }
+
+        await connection.commit();
+        res.status(200).json({ message: 'Itens do pedido atualizados com sucesso!', valor_total: novoValorTotal });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error('Erro ao atualizar itens do pedido:', error);
+        res.status(500).json({ message: 'Erro ao atualizar itens do pedido.', error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
+
+//Rota para abrir um pedido
+router.put('/:pedido/liberar-edicao', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
+    const { pedido } = req.params;
+
+    try {
+        const [result] = await db.query(
+            'UPDATE vendas SET autorizacao_edicao = 1 WHERE pedido = ?',
+            [pedido]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Pedido não encontrado.' });
+        }
+
+        res.status(200).json({ message: 'Edição do pedido liberada com sucesso.' });
+    } catch (error) {
+        console.error('Erro ao liberar edição:', error);
+        res.status(500).json({ message: 'Erro ao liberar edição do pedido.', error: error.message });
+    }
+});
 
 // NOVA ROTA para registrar qualquer pagamento avulso
 // O conceito de "parcelas" fixas é substituído por pagamentos dinâmicos
 
-router.post('/pagar', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
-    const { pedido, valor_pagamento, forma_pagamento } = req.body;
+router.post('/:pedido/pagar', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
+    const { valor_pagamento, forma_pagamento } = req.body;
+    const { pedido } = req.params;
     const connection = await db.getConnection();
 
-    if (!pedido || !valor_pagamento || !forma_pagamento) {
-        return res.status(400).json({ message: 'Pedido, valor_pagamento e forma_pagamento são obrigatórios.' });
+    if (!valor_pagamento || !forma_pagamento) {
+        return res.status(400).json({ message: 'valor_pagamento e forma_pagamento são obrigatórios.' });
     }
 
     try {
@@ -275,7 +732,7 @@ router.post('/pagar', authenticateToken, authorizeRole(['Gerente', 'Vendedor', '
 });
 
 //Rota para cancelar um pedido
-router.put('/:pedido/cancelar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
+router.put('/cancelar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
     const { pedido } = req.body;
 
     const connection = await db.getConnection();
@@ -325,7 +782,7 @@ router.put('/:pedido/cancelar', authenticateToken, authorizeRole(['Gerente', 'Ca
             }
 
             // 3. Atualiza o status para 'Estornado' e status_pagamento para 'Não pago'
-            await connection.query('UPDATE vendas SET status_pedido = ?, status_pagamento = ? WHERE pedido = ?', ['Cancelada', 'Não pago', pedido]);
+            await connection.query('UPDATE vendas SET status_pedido = ?, status_pagamento = ? WHERE pedido = ?', ['Estornado', 'Não pago', pedido]);
 
         } else { // Se o pedido estiver 'Aberto' ou outro status, só cancela
             // Apenas altera o status para 'Cancelada' sem mexer em estoque ou caixa

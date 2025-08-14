@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware'); // Certifique-se de importar os middlewares
-
+/*
 // Rota para CADASTRAR um novo produto (CREATE)
 router.post('/', authenticateToken, authorizeRole(['Gerente', 'Estoquista']), async (req, res) => {
   const { nome, descricao, preco_custo, preco_venda, quantidade_estoque, codigo_barras, codigo_referencia, categoria } = req.body;
@@ -39,6 +39,62 @@ router.post('/', authenticateToken, authorizeRole(['Gerente', 'Estoquista']), as
     }
     res.status(500).json({ message: 'Erro interno do servidor ao cadastrar produto.', error: error.message });
   }
+});
+*/
+
+router.post('/', authenticateToken, authorizeRole(['Gerente', 'Estoquista']), async (req, res) => {
+    const { 
+        nome, 
+        descricao, 
+        preco_custo, 
+        preco_venda, 
+        quantidade, 
+        codigo_barras, 
+        codigo_referencia, 
+        categoria, 
+        tipo_produto // Adicionamos o novo campo aqui
+    } = req.body;
+
+    // 1. Validação básica de campos obrigatórios
+    if (!nome || preco_custo === undefined || preco_venda === undefined || !codigo_barras || !codigo_referencia || categoria === undefined || !tipo_produto) {
+        return res.status(400).json({ message: 'Nome, preço de custo, preço de venda, código de barras, código de referência, categoria e tipo do produto são obrigatórios.' });
+    }
+
+    // 2. Validação condicional para a quantidade de estoque
+    if (tipo_produto === 'padrao' && (quantidade === undefined || quantidade < 0)) {
+        return res.status(400).json({ message: 'Para produtos do tipo "padrao", a quantidade em estoque deve ser um número maior ou igual a zero.' });
+    }
+
+    if (preco_venda <= 0) {
+        return res.status(400).json({ message: 'Preço de venda deve ser maior que zero.' });
+    }
+
+    if (codigo_referencia.length !== 4 || !/^\d{4}$/.test(codigo_referencia)) {
+        return res.status(400).json({ message: 'Código de referência deve ter exatamente 4 dígitos numéricos.' });
+    }
+
+    try {
+        // Define o valor de estoque para produtos personalizados como 0
+        const estoqueFinal = tipo_produto === 'personalizado' ? 0 : quantidade;
+
+        const sql = `
+            INSERT INTO produtos (nome, descricao, preco_custo, preco_venda, quantidade, codigo_barras, codigo_referencia, categoria, tipo_produto)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        const values = [nome, descricao, preco_custo, preco_venda, estoqueFinal, codigo_barras, codigo_referencia, categoria, tipo_produto];
+
+        const [result] = await db.query(sql, values);
+        res.status(201).json({
+            message: 'Produto cadastrado com sucesso!',
+            produtoId: result.insertId
+        });
+    } catch (error) {
+        console.error('Erro ao cadastrar produto:', error);
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ message: 'Código de barras ou código de referência já cadastrado para outro produto.' });
+        }
+        res.status(500).json({ message: 'Erro interno do servidor ao cadastrar produto.', error: error.message });
+    }
 });
 
 // Rota para LISTAR todos os produtos OU BUSCAR por nome/código de referência (READ ALL / SEARCH)

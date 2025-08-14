@@ -8,26 +8,26 @@ Post / http://localhost:3000/vendas
     "cliente_nome":"Supermercado São João"
 }
 
-Put / http://localhost:3000/vendas/itens
+Put / http://localhost:3000/vendas/42/itens
 (Para adicionar itens)
 {
-  "pedido": 34,
   "itens": [
     {
       "codigo_barras": 1234567890124,
       "quantidade": 2
     },
-    {
-      "codigo_barras": 7891234567111,
-      "quantidade": 1
+    { //produtos personalizados
+      "codigo_barras": "7899876543210",
+      "quantidade": 1,
+      "largura": 2.0,
+      "altura": 1.5
     }
   ]
 }
 
-Post  / http://localhost:3000/vendas/pagar
+Post  / http://localhost:3000/vendas/38/pagar
 (O pedido só será dado como pago e concluido após o pagamento total)
 {
-  "pedido": 31,
   "forma_pagamento": "Pix",
   "valor_pagamento": 25.00
 }
@@ -63,13 +63,15 @@ Post caixa
 Post produtos
 
 {
+  "nome": "Teclado Mecânico Gamer",
+  "descricao": "Teclado mecânico com iluminação RGB e switches azuis",
+  "preco_custo": 150.00,
+  "preco_venda": 299.90,
+  "quantidade": 25, ***
   "codigo_barras": "7891234567890",
-  "nome": "Arroz Tipo 1 - 5kg",
-  "descricao": "Arroz branco tipo 1, pacote de 5kg",
-  "preco_venda": 25.90,
-  "preco_custo": 10.15,
-  "quantidade_estoque": 100,
-  "categoria": "Alimentos"
+  "codigo_referencia": "1025",
+  "categoria": "Periféricos",
+  "tipo_produto": "padrao" / "personalizado
 }
 
 post clientes 
@@ -108,11 +110,17 @@ post funcionarios
 }
 
 post login (http://localhost:3000/auth/login)
-
+gerrente
 {
   "email": "mariana.souza@empresa.com",
   "senha": "4589Mari_ana"
 }
+vendedor
+{
+  "email": "ricardo.lima@empresa.com",
+  "senha": "123456789"
+}
+
 
 
 adicionar um código/referência a tabela de produtos. - ok
