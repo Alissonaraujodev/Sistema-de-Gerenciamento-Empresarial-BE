@@ -137,6 +137,7 @@ adicionar responsavel pelo cadastro funcionarios, clientes e produtos -
 oeganizar e decidir o que irá aparecer nos relatorios - 
 adicionar um relatório para produtos(entrada/saida) - 
 adicionar o corpo json das rotas de caixa - 
+adicionar pagamento por clientes - 
 
 1. Relatórios de Caixa e Vendas (Visão Geral) - ok
 2. Autenticação e Autorização de Usuários - ok
