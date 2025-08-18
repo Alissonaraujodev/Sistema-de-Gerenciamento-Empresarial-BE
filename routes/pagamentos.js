@@ -1,0 +1,367 @@
+const express = require('express');
+const router = express.Router();
+const db = require('../config/db'); // conexão com o banco
+const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware'); // middlewares de autenticação/autorização
+
+// Rota para registrar pagamento geral por cliente
+/*
+router.post('/cliente/:clienteNome/pagar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
+    const { clienteNome } = req.params;
+    const { valor_pagamento, forma_pagamento } = req.body;
+    const connection = await db.getConnection();
+
+    if (!valor_pagamento || !forma_pagamento) {
+        return res.status(400).json({ message: 'valor_pagamento e forma_pagamento são obrigatórios.' });
+    }
+
+    try {
+        await connection.beginTransaction();
+
+        // 1. Buscar todos os pedidos do cliente que não estão cancelados/estornados
+        const [vendasRows] = await connection.query(
+            `SELECT pedido, valor_total, valor_pago, status_pedido
+             FROM vendas
+             WHERE cliente_nome = ?
+             AND status_pedido IN ('Aberto') 
+             FOR UPDATE`,
+            [clienteNome]
+        );
+
+        if (vendasRows.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ message: `Nenhum pedido aberto encontrado para o cliente '${clienteNome}'.` });
+        }
+
+        // 2. Calcular saldo total devedor
+        const saldoDevedor = vendasRows.reduce((acc, v) => acc + (v.valor_total - v.valor_pago), 0);
+
+        if (saldoDevedor <= 0) {
+            await connection.rollback();
+            return res.status(400).json({ message: `O cliente '${clienteNome}' não possui saldo em aberto.` });
+        }
+
+        // 3. Registrar o pagamento
+        await connection.query(
+            'INSERT INTO pagamentos (pedido, valor, forma_pagamento, status_pagamento, cliente_nome) VALUES (?, ?, ?, ?, ?)',
+            [null, valor_pagamento, forma_pagamento, 'Pago', clienteNome] // pedido = null pois é pagamento global
+        );
+
+        // 4. Distribuir o pagamento nos pedidos (FIFO - ordem dos pedidos)
+        let restante = parseFloat(valor_pagamento);
+        for (const venda of vendasRows) {
+            if (restante <= 0) break;
+
+            const saldoPedido = venda.valor_total - venda.valor_pago;
+            const pagoAgora = Math.min(saldoPedido, restante);
+
+            const novoValorPago = venda.valor_pago + pagoAgora;
+            let novoStatusPedido = venda.status_pedido;
+            let novoStatusPagamento = 'Aberto';
+
+            if (novoValorPago >= venda.valor_total) {
+                novoStatusPedido = 'Concluída';
+                novoStatusPagamento = 'Pago';
+            }
+
+            // Atualizar pedido
+            await connection.query(
+                'UPDATE vendas SET valor_pago = ?, status_pedido = ?, status_pagamento = ? WHERE pedido = ?',
+                [novoValorPago, novoStatusPedido, novoStatusPagamento, venda.pedido]
+            );
+
+            // Lançar movimentação no caixa
+            await connection.query(
+                `INSERT INTO movimentacoes_caixa 
+                    (descricao, valor, tipo, observacoes, referencia_venda_id)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [
+                    `Pagamento de pedido nº ${venda.pedido} (cliente: ${clienteNome})`,
+                    pagoAgora,
+                    'entrada',
+                    `Forma de pagamento: ${forma_pagamento}`,
+                    venda.pedido
+                ]
+            );
+
+            restante -= pagoAgora;
+        }
+
+        await connection.commit();
+
+        res.status(200).json({
+            message: `Pagamento registrado para o cliente '${clienteNome}'.`,
+            valor_pago: valor_pagamento,
+            saldo_restante: Math.max(0, saldoDevedor - valor_pagamento)
+        });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error('Erro ao registrar pagamento por cliente:', error);
+        res.status(500).json({ message: 'Erro interno ao registrar pagamento por cliente.', error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+*/
+// rota para registrar pagemento por pedido
+
+router.post('/:pedido/pagar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
+    const { valor_pagamento, forma_pagamento } = req.body;
+    const { pedido } = req.params;
+    const connection = await db.getConnection();
+
+    if (!valor_pagamento || !forma_pagamento) {
+        return res.status(400).json({ message: 'valor_pagamento e forma_pagamento são obrigatórios.' });
+    }
+
+    try {
+        await connection.beginTransaction();
+
+        // 1. Busca o pedido
+        const [vendaRows] = await connection.query(
+            'SELECT valor_total, valor_pago, status_pedido, status_pagamento FROM vendas WHERE pedido = ? FOR UPDATE',
+            [pedido]
+        );
+        const venda = vendaRows[0];
+
+        if (!venda || ['Cancelada', 'Estornado', 'Concluída'].includes(venda.status_pedido)) {
+            await connection.rollback();
+            return res.status(400).json({ message: `Não é possível registrar pagamento para este pedido (status atual: ${venda?.status_pedido || 'Desconhecido'}).` });
+        }
+
+        // 2. Registra o novo pagamento
+        await connection.query(
+            'INSERT INTO pagamentos (pedido, valor, forma_pagamento, status_pagamento) VALUES (?, ?, ?, ?)',
+            [pedido, valor_pagamento, forma_pagamento, 'Pago']
+        );
+
+        // 3. Calcula novo valor pago
+        const novoValorPago = parseFloat(venda.valor_pago) + parseFloat(valor_pagamento);
+
+        let novoStatusPedido = 'Aberto';
+        let novoStatusPagamento = 'Não pago';
+        if (novoValorPago >= venda.valor_total) {
+            novoStatusPedido = 'Concluída';
+            novoStatusPagamento = 'Pago';
+        }
+
+        // 4. Atualiza venda
+        await connection.query(
+            'UPDATE vendas SET valor_pago = ?, status_pedido = ?, status_pagamento = ? WHERE pedido = ?',
+            [novoValorPago, novoStatusPedido, novoStatusPagamento, pedido]
+        );
+
+        // 5. Registra movimentação no caixa
+        await connection.query(
+            `INSERT INTO movimentacoes_caixa 
+                (descricao, valor, tipo, observacoes, referencia_venda_id)
+             VALUES (?, ?, ?, ?, ?)`,
+            [
+                `Pagamento de pedido nº ${pedido}`,
+                valor_pagamento,
+                'entrada',
+                `Forma de pagamento: ${forma_pagamento} | Status pedido: ${novoStatusPedido} | Status pagamento: ${novoStatusPagamento}`,
+                pedido
+            ]
+        );
+
+        await connection.commit();
+        res.status(200).json({
+            message: `Pagamento registrado e movimentação lançada no caixa. Novo saldo pago: ${novoValorPago}.`,
+            novo_status: novoStatusPedido
+        });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error('Erro ao registrar pagamento:', error);
+        res.status(500).json({ message: 'Erro interno do servidor ao registrar pagamento.', error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
+// rota para gerar pagamento por cliente
+router.post('/cliente/:clienteNome/pagar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
+    const { clienteNome } = req.params;
+    const { valor_pagamento, forma_pagamento } = req.body;
+    const connection = await db.getConnection();
+
+    if (!valor_pagamento || !forma_pagamento) {
+        return res.status(400).json({ message: 'valor_pagamento e forma_pagamento são obrigatórios.' });
+    }
+
+    const valor = parseFloat(valor_pagamento);
+    if (isNaN(valor) || valor <= 0) {
+        return res.status(400).json({ message: 'Valor do pagamento inválido.' });
+    }
+
+    try {
+        await connection.beginTransaction();
+
+        // Buscar todos os pedidos abertos ou parcialmente pagos do cliente, ordenados do mais antigo
+        const [vendasRows] = await connection.query(
+            `SELECT pedido, valor_total, valor_pago, status_pedido
+             FROM vendas
+             WHERE cliente_nome = ? AND status_pedido IN ('Aberto', 'Concluída') 
+             ORDER BY data_venda ASC
+             FOR UPDATE`,
+            [clienteNome]
+        );
+
+        if (vendasRows.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ message: `Nenhum pedido aberto encontrado para o cliente '${clienteNome}'.` });
+        }
+
+        let restante = valor;
+
+        // Distribuir o pagamento nos pedidos
+        for (const venda of vendasRows) {
+            if (restante <= 0) break;
+
+            const saldoPedido = parseFloat(venda.valor_total) - parseFloat(venda.valor_pago);
+            if (saldoPedido <= 0) continue; // já pago
+
+            const pagoAgora = Math.min(saldoPedido, restante);
+            const novoValorPago = parseFloat(venda.valor_pago) + pagoAgora;
+
+            // Determina o status correto
+            const novoStatusPedido = (novoValorPago >= parseFloat(venda.valor_total)) ? 'Concluída' : venda.status_pedido;
+            const novoStatusPagamento = (novoValorPago >= parseFloat(venda.valor_total)) ? 'Pago' : 'Não pago';
+
+            // Atualiza o pedido
+            await connection.query(
+                'UPDATE vendas SET valor_pago = ?, status_pedido = ?, status_pagamento = ? WHERE pedido = ?',
+                [novoValorPago, novoStatusPedido, novoStatusPagamento, venda.pedido]
+            );
+
+            // Movimentação no caixa
+            await connection.query(
+                `INSERT INTO movimentacoes_caixa 
+                    (descricao, valor, tipo, observacoes, referencia_venda_id)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [
+                    `Pagamento de pedido nº ${venda.pedido} (cliente: ${clienteNome})`,
+                    pagoAgora,
+                    'entrada',
+                    `Forma de pagamento: ${forma_pagamento}`,
+                    venda.pedido
+                ]
+            );
+
+            restante -= pagoAgora;
+        }
+
+        // Registrar pagamento global do cliente
+        await connection.query(
+            'INSERT INTO pagamentos (pedido, valor, forma_pagamento, status_pagamento, cliente_nome) VALUES (?, ?, ?, ?, ?)',
+            [null, valor, forma_pagamento, 'Pago', clienteNome]
+        );
+
+        await connection.commit();
+
+        res.status(200).json({
+            message: `Pagamento registrado para o cliente '${clienteNome}'.`,
+            valor_pago: valor,
+            saldo_restante: restante > 0 ? restante : 0
+        });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error('Erro ao registrar pagamento por cliente:', error);
+        res.status(500).json({ message: 'Erro interno ao registrar pagamento por cliente.', error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
+// Rota para GERAR RELATÓRIO de cliente com vendas
+router.get('/:nome/relatorio', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
+  const { nome } = req.params;
+
+  try {
+    // 1. Busca o cliente
+    const [clienteRows] = await db.query(`
+      SELECT cnpj, cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep, data_cadastro
+      FROM clientes
+      WHERE LOWER(cliente_nome) LIKE LOWER(?)
+      LIMIT 1
+    `, [`%${nome}%`]);
+
+    if (clienteRows.length === 0) {
+      return res.status(404).json({ message: 'Cliente não encontrado.' });
+    }
+
+    const cliente = clienteRows[0];
+    const enderecoCompleto = `${cliente.logradouro}, ${cliente.numero}${cliente.complemento ? `, ${cliente.complemento}` : ''}, ${cliente.bairro}, ${cliente.cidade} - ${cliente.estado}, ${cliente.cep}`;
+
+    // 2. Busca as vendas do cliente com valor_total e valor_pago
+    const [vendasRows] = await db.query(`
+      SELECT
+        v.pedido AS venda_id,
+        v.data_venda,
+        v.valor_total,
+        v.valor_pago,
+        v.forma_pagamento,
+        v.status_pedido,
+        v.status_pagamento,
+        mc.id AS movimentacao_caixa_id,
+        mc.tipo AS tipo_movimentacao_caixa,
+        mc.valor AS valor_movimentacao_caixa,
+        mc.data_movimentacao AS data_movimentacao_caixa
+      FROM vendas v
+      LEFT JOIN movimentacoes_caixa mc 
+        ON v.pedido = mc.referencia_venda_id AND mc.tipo = 'entrada'
+      WHERE LOWER(v.cliente_nome) LIKE LOWER(?)
+      ORDER BY v.data_venda DESC
+    `, [`%${nome}%`]);
+
+    // 3. Resumo das vendas
+    const vendasResumo = vendasRows.map(venda => ({
+      pedido: venda.venda_id,
+      status_pagamento: venda.status_pagamento,
+      status_pedido: venda.status_pedido,
+      valor_total: venda.valor_total,
+      valor_pago: venda.valor_pago || 0
+    }));
+
+    // Filtra somente pedidos que contam para o financeiro
+    const pedidosValidos = vendasResumo.filter(v =>
+      v.status_pedido === 'Aberto' || v.status_pedido === 'Concluída'
+    );
+
+    // Faz as somas usando apenas os pedidos válidos
+    const valor_total_pedidos = pedidosValidos.reduce((sum, v) => sum + Number(v.valor_total || 0), 0);
+    const valor_total_pago = pedidosValidos.reduce((sum, v) => sum + Number(v.valor_pago || 0), 0);
+    const valor_faltante = valor_total_pedidos - valor_total_pago;
+
+    // 5. Monta o relatório final
+    const relatorioCliente = {
+      cliente: {
+        cnpj: cliente.cnpj,
+        cliente_nome: cliente.cliente_nome,
+        email: cliente.email,
+        telefone: cliente.telefone,
+        endereco: enderecoCompleto,
+        data_cadastro: cliente.data_cadastro
+      },
+      resumo_financeiro: {
+        valor_total_pedidos,
+        valor_total_pago,
+        valor_faltante
+      },
+      vendas: vendasResumo
+    };
+
+    res.status(200).json(relatorioCliente);
+
+  } catch (error) {
+    console.error('Erro ao gerar relatório de cliente:', error);
+    res.status(500).json({
+      message: 'Erro interno do servidor ao gerar relatório de cliente.',
+      error: error.message
+    });
+  }
+});
+
+module.exports = router;

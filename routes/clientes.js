@@ -145,7 +145,6 @@ router.put('/:identificador', authenticateToken, authorizeRole(['Gerente']), asy
   }
 });
 
-
 // 🔴 Excluir cliente por cnpj ou nome
 
 router.delete('/:identificador', authenticateToken, authorizeRole(['Gerente']), async (req, res) => {
@@ -184,94 +183,6 @@ router.delete('/:identificador', authenticateToken, authorizeRole(['Gerente']), 
   }
 });
 
-// Rota para GERAR RELATÓRIO de cliente com vendas
-router.get('/:nome/relatorio', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
-  const { nome } = req.params;
-
-  try {
-    // 1. Busca o cliente
-    const [clienteRows] = await db.query(`
-      SELECT cnpj, cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep, data_cadastro
-      FROM clientes
-      WHERE LOWER(cliente_nome) LIKE LOWER(?)
-      LIMIT 1
-    `, [`%${nome}%`]);
-
-    if (clienteRows.length === 0) {
-      return res.status(404).json({ message: 'Cliente não encontrado.' });
-    }
-
-    const cliente = clienteRows[0];
-    const enderecoCompleto = `${cliente.logradouro}, ${cliente.numero}${cliente.complemento ? `, ${cliente.complemento}` : ''}, ${cliente.bairro}, ${cliente.cidade} - ${cliente.estado}, ${cliente.cep}`;
-
-    // 2. Busca as vendas do cliente com valor_total e valor_pago
-    const [vendasRows] = await db.query(`
-      SELECT
-        v.pedido AS venda_id,
-        v.data_venda,
-        v.valor_total,
-        v.valor_pago, -- precisa existir essa coluna no banco
-        v.forma_pagamento,
-        v.status_pedido,
-        v.status_pagamento,
-        mc.id AS movimentacao_caixa_id,
-        mc.tipo AS tipo_movimentacao_caixa,
-        mc.valor AS valor_movimentacao_caixa,
-        mc.data_movimentacao AS data_movimentacao_caixa
-      FROM vendas v
-      LEFT JOIN movimentacoes_caixa mc 
-        ON v.pedido = mc.referencia_venda_id AND mc.tipo = 'entrada'
-      WHERE LOWER(v.cliente_nome) LIKE LOWER(?)
-      ORDER BY v.data_venda DESC
-    `, [`%${nome}%`]);
-
-    // 3. Resumo das vendas
-    const vendasResumo = vendasRows.map(venda => ({
-      pedido: venda.venda_id,
-      status_pagamento: venda.status_pagamento,
-      status_pedido: venda.status_pedido,
-      valor_total: venda.valor_total,
-      valor_pago: venda.valor_pago || 0
-    }));
-
-    // Filtra somente pedidos que contam para o financeiro
-    const pedidosValidos = vendasResumo.filter(v =>
-      v.status_pedido === 'Aberto' || v.status_pedido === 'Concluída'
-    );
-
-    // Faz as somas usando apenas os pedidos válidos
-    const valor_total_pedidos = pedidosValidos.reduce((sum, v) => sum + Number(v.valor_total || 0), 0);
-    const valor_total_pago = pedidosValidos.reduce((sum, v) => sum + Number(v.valor_pago || 0), 0);
-    const valor_faltante = valor_total_pedidos - valor_total_pago;
-
-    // 5. Monta o relatório final
-    const relatorioCliente = {
-      cliente: {
-        cnpj: cliente.cnpj,
-        cliente_nome: cliente.cliente_nome,
-        email: cliente.email,
-        telefone: cliente.telefone,
-        endereco: enderecoCompleto,
-        data_cadastro: cliente.data_cadastro
-      },
-      resumo_financeiro: {
-        valor_total_pedidos,
-        valor_total_pago,
-        valor_faltante
-      },
-      vendas: vendasResumo
-    };
-
-    res.status(200).json(relatorioCliente);
-
-  } catch (error) {
-    console.error('Erro ao gerar relatório de cliente:', error);
-    res.status(500).json({
-      message: 'Erro interno do servidor ao gerar relatório de cliente.',
-      error: error.message
-    });
-  }
-});
 
 
 

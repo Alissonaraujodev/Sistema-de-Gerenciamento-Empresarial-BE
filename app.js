@@ -13,6 +13,7 @@ const caixaRoutes = require('./routes/caixa');
 const relatoriosRoutes = require('./routes/relatorios');
 const funcionariosRoutes = require('./routes/funcionarios');
 const authRoutes = require('./routes/auth');
+const pagamentosRoutes = require('./routes/pagamentos');
 
 app.use(express.json());
 
@@ -43,6 +44,7 @@ app.use('/caixa', caixaRoutes);
 app.use('/relatorios', relatoriosRoutes);
 app.use('/funcionarios', funcionariosRoutes);
 app.use('/auth', authRoutes); 
+app.use('/pagamentos', pagamentosRoutes);
 
 app.listen(port, () => {
   console.log(`Servidor rodando em http://localhost:${port}`);

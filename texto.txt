@@ -25,12 +25,6 @@ Put / http://localhost:3000/vendas/42/itens
   ]
 }
 
-Post  / http://localhost:3000/vendas/38/pagar
-(O pedido só será dado como pago e concluido após o pagamento total)
-{
-  "forma_pagamento": "Pix",
-  "valor_pagamento": 25.00
-}
 
 Put / http://localhost:3000/vendas/21/cancelar
 (cancelar um pedido)
@@ -40,6 +34,26 @@ Put / http://localhost:3000/vendas/21/cancelar
 
 Get vendas
 http://localhost:3000/vendas/35 (pedido especifico)
+
+Pagamentos 
+
+Post  / http://localhost:3000/pagamentos/38/pagar
+pagamento por pedido
+(O pedido só será dado como pago e concluido após o pagamento total)
+{
+  "forma_pagamento": "Pix",
+  "valor_pagamento": 25.00
+}
+
+Get  / http://localhost:3000/pagamentos/Supermercado São João/relatorio
+
+Post  http://localhost:3000/pagamentos/cliente/Supermercado São João/pagar
+pagamento por cliente
+{
+  "forma_pagamento": "Pix",
+  "valor_pagamento": 25.00
+}
+
 
 Get vendas (relatórios)
 http://localhost:3000/relatorios/vendas?start_date=2025-08-01&end_date=2025-08-30 (data)
@@ -120,6 +134,11 @@ vendedor
   "email": "ricardo.lima@empresa.com",
   "senha": "123456789"
 }
+caixa
+{
+  "email": "ana_clara@empresa.com",
+  "senha": "AnaClara8765"
+}
 
 
 
@@ -132,12 +151,14 @@ adicionar um vinculo entre venda e vendedor, para o caso de comissão. ok
 adicionar o cliente e vendedor ao get de pedidos - http://localhost:3000/vendas/15/detalhes. ok
 adicionar uma abertura de pedidos para possiveis mudanças. ok 
 testar rota de vendas - ok 
+adicionar pagamento por clientes - ok
 
+adicionar o motivo do cancelamento de uma venda, e atualizar o valor pago e verificar a atualização do estoque - 
 adicionar responsavel pelo cadastro funcionarios, clientes e produtos - 
 oeganizar e decidir o que irá aparecer nos relatorios - 
 adicionar um relatório para produtos(entrada/saida) - 
 adicionar o corpo json das rotas de caixa - 
-adicionar pagamento por clientes - 
+
 
 1. Relatórios de Caixa e Vendas (Visão Geral) - ok
 2. Autenticação e Autorização de Usuários - ok
