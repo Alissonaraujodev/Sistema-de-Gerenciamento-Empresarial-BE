@@ -119,7 +119,7 @@ router.post('/:pedido/pagar', authenticateToken, authorizeRole(['Gerente', 'Caix
 
         // 1. Busca o pedido
         const [vendaRows] = await connection.query(
-            'SELECT valor_total, valor_pago, status_pedido, status_pagamento FROM vendas WHERE pedido = ? FOR UPDATE',
+            'SELECT cliente_nome, valor_total, valor_pago, status_pedido, status_pagamento FROM vendas WHERE pedido = ? FOR UPDATE',
             [pedido]
         );
         const venda = vendaRows[0];
@@ -131,8 +131,8 @@ router.post('/:pedido/pagar', authenticateToken, authorizeRole(['Gerente', 'Caix
 
         // 2. Registra o novo pagamento
         await connection.query(
-            'INSERT INTO pagamentos (pedido, valor, forma_pagamento, status_pagamento) VALUES (?, ?, ?, ?)',
-            [pedido, valor_pagamento, forma_pagamento, 'Pago']
+            'INSERT INTO pagamentos (cliente_nome, pedido, valor, forma_pagamento, status_pagamento) VALUES (?, ?, ?, ?, ?)',
+            [venda.cliente_nome, pedido, valor_pagamento, forma_pagamento, 'Pago']
         );
 
         // 3. Calcula novo valor pago

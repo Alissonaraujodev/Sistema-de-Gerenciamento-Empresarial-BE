@@ -179,6 +179,7 @@ router.put('/:pedido/itens', authenticateToken, authorizeRole(['Gerente', 'Vende
 });
 
 //Rota para abrir um pedido
+/*
 router.put('/:pedido/liberar-edicao', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
     const { pedido } = req.params;
 
@@ -197,11 +198,45 @@ router.put('/:pedido/liberar-edicao', authenticateToken, authorizeRole(['Gerente
         console.error('Erro ao liberar edição:', error);
         res.status(500).json({ message: 'Erro ao liberar edição do pedido.', error: error.message });
     }
+});*/
+
+// Rota para abrir um pedido (liberar edição)
+router.put('/:pedido/liberar-edicao', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
+    const { pedido } = req.params;
+    const { motivo_abertura, responsavel_abertura } = req.body;
+
+    if (!motivo_abertura || !responsavel_abertura) {
+        return res.status(400).json({ message: 'O motivo da liberação e o responsavel são obrigatórios.' });
+    }
+
+    try {
+        const [result] = await db.query(
+            `UPDATE vendas 
+             SET autorizacao_edicao = 1, motivo_abertura = ?, responsavel_abertura = ?, data_liberacao = NOW() 
+             WHERE pedido = ?`,
+            [motivo_abertura, responsavel_abertura, pedido]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Pedido não encontrado.' });
+        }
+
+        res.status(200).json({
+            message: 'Edição do pedido liberada com sucesso.',
+            pedido,
+            motivo_abertura,
+            responsavel_abertura
+        });
+    } catch (error) {
+        console.error('Erro ao liberar edição:', error);
+        res.status(500).json({ message: 'Erro ao liberar edição do pedido.', error: error.message });
+    }
 });
 
-//Rota para cancelar um pedido
+
+// Rota para cancelar um pedido
 router.put('/cancelar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
-    const { pedido } = req.body;
+    const { pedido, motivo_cancelamento } = req.body;
 
     const connection = await db.getConnection();
 
@@ -209,10 +244,17 @@ router.put('/cancelar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), 
         return res.status(400).json({ message: 'Pedido é obrigatório.' });
     }
 
+    if (!motivo_cancelamento) {
+        return res.status(400).json({ message: 'O motivo do cancelamento é obrigatório.' });
+    }
+
     try {
         await connection.beginTransaction();
 
-        const [vendaRows] = await connection.query('SELECT status_pedido, valor_total FROM vendas WHERE pedido = ? FOR UPDATE', [pedido]);
+        const [vendaRows] = await connection.query(
+            'SELECT status_pedido, valor_total, valor_pago FROM vendas WHERE pedido = ? FOR UPDATE',
+            [pedido]
+        );
         const venda = vendaRows[0];
 
         if (!venda) {
@@ -220,41 +262,51 @@ router.put('/cancelar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), 
             return res.status(404).json({ message: 'Pedido não encontrado.' });
         }
 
-        // Se o pedido já estiver cancelado ou estornado, não faz nada
-        if (venda.status_pedido === 'Cancelada' || venda.status_pedido === 'Estornado') {
+        // Se já estiver cancelado/estornado, não faz nada
+        if (['Cancelada', 'Estornado'].includes(venda.status_pedido)) {
             await connection.rollback();
             return res.status(400).json({ message: `O pedido já está com status '${venda.status_pedido}'.` });
         }
 
-        // Se o pedido estiver concluído, precisamos reverter o estoque e o caixa
-        if (venda.status_pedido === 'Concluída') {
-            const [itensRows] = await connection.query('SELECT * FROM itens_venda WHERE pedido = ?', [pedido]);
+        // 1. Sempre devolve os itens ao estoque
+        const [itensRows] = await connection.query(
+            'SELECT codigo_barras, quantidade FROM itens_venda WHERE pedido = ?',
+            [pedido]
+        );
 
-            if (itensRows.length > 0) {
-                // 1. Devolve os produtos ao estoque
-                for (const item of itensRows) {
-                    await connection.query('UPDATE produtos SET quantidade = quantidade + ? WHERE codigo_barras = ?', [item.quantidade, item.codigo_barras]);
-                }
+        for (const item of itensRows) {
+            await connection.query(
+                'UPDATE produtos SET quantidade = quantidade + ? WHERE codigo_barras = ?',
+                [item.quantidade, item.codigo_barras]
+            );
+        }
 
-                // 2. Lança uma movimentação de caixa de saída para estorno
-                await connection.query(
-                    'INSERT INTO movimentacoes_caixa (descricao, valor, tipo, observacoes, referencia_venda_id) VALUES (?, ?, ?, ?, ?)',
-                    [
-                      `Estorno do pedido n°${pedido}`,
-                      venda.valor_total,
-                      'saida',
-                      'Estorno referente ao cancelamento da venda',
-                      pedido
-                    ]
-                );
-            }
+        // 2. Verifica se existe pagamento (mesmo parcial)
+        if (parseFloat(venda.valor_pago) > 0) {
+            // Estorna o valor pago
+            await connection.query(
+                'INSERT INTO movimentacoes_caixa (descricao, valor, tipo, observacoes, referencia_venda_id) VALUES (?, ?, ?, ?, ?)',
+                [
+                    `Estorno do pedido n°${pedido}`,
+                    venda.valor_pago,
+                    'saida',
+                    'Estorno referente ao cancelamento da venda',
+                    pedido
+                ]
+            );
 
-            // 3. Atualiza o status para 'Estornado' e status_pagamento para 'Não pago'
-            await connection.query('UPDATE vendas SET status_pedido = ?, status_pagamento = ? WHERE pedido = ?', ['Estornado', 'Não pago', pedido]);
+            // Atualiza para estornado
+            await connection.query(
+                'UPDATE vendas SET status_pedido = ?, status_pagamento = ?, valor_pago = ?, motivo_cancelamento = ? WHERE pedido = ?',
+                ['Estornado', 'Não pago', 0, motivo_cancelamento, pedido]
+            );
 
-        } else { // Se o pedido estiver 'Aberto' ou outro status, só cancela
-            // Apenas altera o status para 'Cancelada' sem mexer em estoque ou caixa
-            await connection.query('UPDATE vendas SET status_pedido = ? WHERE pedido = ?', ['Cancelada', pedido]);
+        } else {
+            // Se não houve pagamento, só cancela
+            await connection.query(
+                'UPDATE vendas SET status_pedido = ?, status_pagamento = ?, motivo_cancelamento = ? WHERE pedido = ?',
+                ['Cancelada', 'Não pago', motivo_cancelamento, pedido]
+            );
         }
 
         await connection.commit();
@@ -269,6 +321,7 @@ router.put('/cancelar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), 
         connection.release();
     }
 });
+
 
 //Rota para pesquisar sobre um pedido
 router.get('/:pedido', authenticateToken, async (req, res) => {

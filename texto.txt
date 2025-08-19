@@ -25,11 +25,15 @@ Put / http://localhost:3000/vendas/42/itens
   ]
 }
 
+Put http://localhost:3000/vendas/56/liberar-edicao
+(Para abrir um pedido)
 
-Put / http://localhost:3000/vendas/21/cancelar
+
+Put / http://localhost:3000/vendas/cancelar
 (cancelar um pedido)
 {
-  "pedido": 21
+ "pedido": 28,
+ "motivo_cancelamento": "Cancelado pelo cliente, poís não queria mais o item"
 }
 
 Get vendas
@@ -55,7 +59,7 @@ pagamento por cliente
 }
 
 
-Get vendas (relatórios)
+Get relatorios (vendas)
 http://localhost:3000/relatorios/vendas?start_date=2025-08-01&end_date=2025-08-30 (data)
 http://localhost:3000/relatorios/vendas?status_venda=Cancelada (status da venda)
 http://localhost:3000/relatorios/vendas?status_pagamento=Nao Pago (status de pagamento)
@@ -152,8 +156,9 @@ adicionar o cliente e vendedor ao get de pedidos - http://localhost:3000/vendas/
 adicionar uma abertura de pedidos para possiveis mudanças. ok 
 testar rota de vendas - ok 
 adicionar pagamento por clientes - ok
+adicionar o motivo do cancelamento de uma venda, e atualizar o valor pago e verificar a atualização do estoque - ok
+adicionar o motivo da abertura de uma venda - ok
 
-adicionar o motivo do cancelamento de uma venda, e atualizar o valor pago e verificar a atualização do estoque - 
 adicionar responsavel pelo cadastro funcionarios, clientes e produtos - 
 oeganizar e decidir o que irá aparecer nos relatorios - 
 adicionar um relatório para produtos(entrada/saida) - 
