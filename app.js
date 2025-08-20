@@ -40,7 +40,7 @@ app.get('/api/test-db', async (req, res) => {
 });
 
 app.use('/produtos', produtosRoutes);
-app.use('/clientes', clientesRoutes); // Usa as rotas de clientes sob o prefixo /api/clientes
+app.use('/clientes', clientesRoutes);
 app.use('/vendas', vendasRoutes);
 app.use('/caixa', caixaRoutes);
 app.use('/relatorios', relatoriosRoutes);

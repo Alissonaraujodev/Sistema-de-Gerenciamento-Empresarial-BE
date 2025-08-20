@@ -159,6 +159,7 @@ adicionar pagamento por clientes - ok
 adicionar o motivo do cancelamento de uma venda, e atualizar o valor pago e verificar a atualização do estoque - ok
 adicionar o motivo da abertura de uma venda - ok
 
+adicionar a coluna de unidade_medida para o cadastro de produtos - 
 adicionar responsavel pelo cadastro funcionarios, clientes e produtos - 
 oeganizar e decidir o que irá aparecer nos relatorios - 
 adicionar um relatório para produtos(entrada/saida) - 
