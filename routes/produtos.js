@@ -2,45 +2,9 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
-const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware'); // Certifique-se de importar os middlewares
-/*
+const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware');
+
 // Rota para CADASTRAR um novo produto (CREATE)
-router.post('/', authenticateToken, authorizeRole(['Gerente', 'Estoquista']), async (req, res) => {
-  const { nome, descricao, preco_custo, preco_venda, quantidade_estoque, codigo_barras, codigo_referencia, categoria } = req.body;
-
-  // Validação básica
-  if (!nome || preco_custo === undefined || preco_venda === undefined || quantidade_estoque === undefined || !codigo_barras || !codigo_referencia || categoria === undefined) {
-    return res.status(400).json({ message: 'Nome, preço de custo, preço de venda, estoque, código de barras, código de referência e categotia são obrigatórios.' });
-  }
-  if (preco_venda <= 0 || quantidade_estoque < 0) {
-    return res.status(400).json({ message: 'Preço deve ser maior que zero e estoque não pode ser negativo.' });
-  }
-  if (codigo_referencia.length !== 4 || !/^\d{4}$/.test(codigo_referencia)) {
-      return res.status(400).json({ message: 'Código de referência deve ter exatamente 4 dígitos numéricos.' });
-  }
-
-  try {
-    const sql = `
-      INSERT INTO produtos (nome, descricao, preco_custo, preco_venda, quantidade_estoque, codigo_barras, codigo_referencia, categoria)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    const values = [nome, descricao, preco_custo, preco_venda, quantidade_estoque, codigo_barras, codigo_referencia, categoria];
-
-    const [result] = await db.query(sql, values);
-    res.status(201).json({
-      message: 'Produto cadastrado com sucesso!',
-      produtoId: result.insertId
-    });
-  } catch (error) {
-    console.error('Erro ao cadastrar produto:', error);
-    // Erro de código de barras ou referência duplicado
-    if (error.code === 'ER_DUP_ENTRY') {
-        return res.status(409).json({ message: 'Código de barras ou código de referência já cadastrado para outro produto.' });
-    }
-    res.status(500).json({ message: 'Erro interno do servidor ao cadastrar produto.', error: error.message });
-  }
-});
-*/
 
 router.post('/', authenticateToken, authorizeRole(['Gerente', 'Estoquista']), async (req, res) => {
     const { 

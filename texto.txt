@@ -176,3 +176,5 @@ sql
 tirar a tabela pagamentos_parcelados do banco de dados(Não está mais sendo usada)
 tirar as colunas valor_sinal, forma_pagamento, parcelas, paga, cliente_slug da tabela vendas
 atualizar a tabela produtos, trocar o nome dela para estoque 
+
+ relatório ( produtos mais vendidos por período) relatorios.js
