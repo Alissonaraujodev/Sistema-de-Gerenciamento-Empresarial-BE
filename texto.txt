@@ -144,7 +144,35 @@ caixa
   "senha": "AnaClara8765"
 }
 
+caixa 
+post(abrir caixa)
+http://localhost:3000/Caixa
 
+{
+  saldo_inicial: 100.00
+}
+
+put(fechar caixa)
+http://localhost:3000/caixa/fechar/1
+
+get(pesquisa por data)caixa
+http://localhost:3000/caixa/relatorio/data/2025-08-24
+
+get(pesquisa por id)caixa
+http://localhost:3000/caixa/1/relatorio
+
+extrato do caixa por um periodo de tempo
+get(todas as movimentações)
+http://localhost:3000/caixa
+
+get (a partir de uma data)
+http://localhost:3000/caixa?start_date=2025-08-01
+
+get(até uma data)
+http://localhost:3000/caixa?end_date=2025-08-15
+
+get(entre um intervalo de datas)
+http://localhost:3000/caixa?start_date=2025-08-01&end_date=2025-08-15
 
 adicionar um código/referência a tabela de produtos. - ok
 adicionar um cadastro de funcionarios. - ok
@@ -178,3 +206,7 @@ tirar as colunas valor_sinal, forma_pagamento, parcelas, paga, cliente_slug da t
 atualizar a tabela produtos, trocar o nome dela para estoque 
 
  relatório ( produtos mais vendidos por período) relatorios.js
+
+ Quer que eu também adicione uma rota para verificar se há um caixa aberto atualmente (útil pro front-end saber se mostra o botão "Abrir caixa" ou "Registrar movimentação")?
+
+Se quiser, posso melhorar o PDF para ficar ainda mais bonito, com tabela real, cores e saldo inicial/final destacado, quase como um extrato bancário profissional.
