@@ -65,7 +65,7 @@ router.post('/', authenticateToken, authorizeRole(['Gerente', 'Estoquista']), as
 router.get('/', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa', 'Estoquista']), async (req, res) => {
   const { search } = req.query; // Parâmetro de busca
 
-  let sql = 'SELECT id, nome, descricao, preco_custo, preco_venda, quantidade_estoque, codigo_barras, codigo_referencia, categoria, data_cadastro FROM produtos';
+  let sql = 'SELECT id, nome, descricao, preco_custo, preco_venda, quantidade, codigo_barras, codigo_referencia, categoria, data_cadastro FROM produtos';
   const params = [];
 
   if (search) {
@@ -84,13 +84,13 @@ router.get('/', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa'
     res.status(500).json({ message: 'Erro interno do servidor ao buscar produtos.', error: error.message });
   }
 });
-
+/*
 // Rota para listar todos os produtos ou buscar por identificador (ID, nome, código de barras ou referência)
 router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa', 'Estoquista']), async (req, res) => {
   const { identificador } = req.params;
 
   let sql = `
-    SELECT id, nome, descricao, preco_custo, preco_venda, quantidade_estoque, 
+    SELECT id, nome, descricao, preco_custo, preco_venda, quantidade, 
            codigo_barras, codigo_referencia, categoria, data_cadastro 
     FROM produtos
   `;
@@ -117,19 +117,51 @@ router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vend
     console.error('Erro ao buscar produtos:', error);
     res.status(500).json({ message: 'Erro interno do servidor ao buscar produtos.', error: error.message });
   }
+});/*/
+ 
+router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa', 'Estoquista']), async (req, res) => {
+  const { identificador } = req.params;
+
+  // A busca será feita por id exato ou nome/codigo parcial
+  const sql = `
+    SELECT id, nome, descricao, preco_custo, preco_venda, quantidade, 
+           codigo_barras, codigo_referencia, categoria, data_cadastro 
+    FROM produtos
+    WHERE id = ? OR nome LIKE ? OR codigo_barras LIKE ? OR codigo_referencia LIKE ?
+    LIMIT 1
+  `;
+  const params = [identificador, `%${identificador}%`, `%${identificador}%`, `%${identificador}%`];
+
+  try {
+    const [rows] = await db.query(sql, params);
+
+    // Se a busca retornar 0 produtos, envia um 404
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Produto não encontrado.' });
+    }
+
+    // Retorna o primeiro produto encontrado
+    res.status(200).json(rows[0]);
+    
+  } catch (error) {
+    console.error('Erro ao buscar produto:', error);
+    res.status(500).json({ message: 'Erro interno do servidor ao buscar produto.', error: error.message });
+  }
 });
+
+
 
 // Rota para ATUALIZAR um produto (UPDATE)
 
 router.put('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Estoquista']), async (req, res) => {
   const { identificador } = req.params;
-  const { nome, descricao, preco_custo, preco_venda, quantidade_estoque, codigo_barras, codigo_referencia, categoria } = req.body;
+  const { nome, descricao, preco_custo, preco_venda, quantidade, codigo_barras, codigo_referencia, categoria } = req.body;
 
-  if (!nome || preco_custo === undefined || descricao === undefined || preco_venda === undefined || quantidade_estoque === undefined || !codigo_barras || !codigo_referencia || categoria === undefined) {
+  if (!nome || preco_custo === undefined || descricao === undefined || preco_venda === undefined || quantidade === undefined || !codigo_barras || !codigo_referencia || categoria === undefined) {
     return res.status(400).json({ message: 'Todos os campos são obrigatórios.' });
   }
 
-  if (preco_venda <= 0 || preco_custo < 0 || quantidade_estoque < 0) {
+  if (preco_venda <= 0 || preco_custo < 0 || quantidade < 0) {
     return res.status(400).json({ message: 'Preço de custo e de venda deve ser maior que zero e estoque não pode ser negativo.' });
   }
 
@@ -152,10 +184,10 @@ router.put('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Esto
 
     const sql = `
       UPDATE produtos
-      SET nome = ?, descricao = ?, preco_custo = ?, preco_venda = ?, quantidade_estoque = ?, codigo_barras = ?, codigo_referencia = ?, categoria = ?
+      SET nome = ?, descricao = ?, preco_custo = ?, preco_venda = ?, quantidade = ?, codigo_barras = ?, codigo_referencia = ?, categoria = ?
       WHERE id = ?
     `;
-    const values = [nome, descricao, preco_custo, preco_venda, quantidade_estoque, codigo_barras, codigo_referencia, categoria, produtoId];
+    const values = [nome, descricao, preco_custo, preco_venda, quantidade, codigo_barras, codigo_referencia, categoria, produtoId];
 
     const [result] = await db.query(sql, values);
 
@@ -169,9 +201,7 @@ router.put('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Esto
   }
 });
 
-
 // Rota para EXCLUIR um produto (DELETE) - Mantenha como está
-
 router.delete('/:identificador', authenticateToken, authorizeRole(['Gerente']), async (req, res) => {
   const { identificador } = req.params;
 
@@ -207,7 +237,6 @@ router.delete('/:identificador', authenticateToken, authorizeRole(['Gerente']), 
     res.status(500).json({ message: 'Erro interno do servidor ao excluir produto.', error: error.message });
   }
 });
-
 
 module.exports = router;
 
