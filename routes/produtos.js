@@ -84,7 +84,7 @@ router.get('/', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa'
     res.status(500).json({ message: 'Erro interno do servidor ao buscar produtos.', error: error.message });
   }
 });
-/*
+
 // Rota para listar todos os produtos ou buscar por identificador (ID, nome, código de barras ou referência)
 router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa', 'Estoquista']), async (req, res) => {
   const { identificador } = req.params;
@@ -117,8 +117,8 @@ router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vend
     console.error('Erro ao buscar produtos:', error);
     res.status(500).json({ message: 'Erro interno do servidor ao buscar produtos.', error: error.message });
   }
-});/*/
- 
+});
+ /*
 router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa', 'Estoquista']), async (req, res) => {
   const { identificador } = req.params;
 
@@ -148,7 +148,7 @@ router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vend
     res.status(500).json({ message: 'Erro interno do servidor ao buscar produto.', error: error.message });
   }
 });
-
+*/
 
 
 // Rota para ATUALIZAR um produto (UPDATE)

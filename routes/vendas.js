@@ -33,11 +33,7 @@ router.post('/', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa
     }
 });
 
-// Rota para ADICIONAR ITENS a um pedido aberto (agora com itens personalizados)
-
-
 // rota de editar itens
-
 router.put('/:pedido/itens', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa']), async (req, res) => {
     const { pedido } = req.params;
     const { itens } = req.body;
@@ -97,23 +93,24 @@ router.put('/:pedido/itens', authenticateToken, authorizeRole(['Gerente', 'Vende
         await connection.query('DELETE FROM itens_venda WHERE pedido = ?', [pedido]);
         let novoValorTotal = 0;
 
-        // 5. Adiciona novos itens
+        // 5. Adiciona novos itens (agora pelo nome_produto)
         for (const item of itens) {
-            const { codigo_barras, quantidade, largura, altura } = item;
+            const { nome, quantidade, largura, altura } = item;
 
             if (quantidade <= 0) {
                 await connection.rollback();
                 throw new Error(`A quantidade do produto deve ser maior que zero.`);
             }
 
+            // Busca o produto pelo nome
             const [produtoRows] = await connection.query(
-                'SELECT nome, preco_venda, quantidade, tipo_produto FROM produtos WHERE codigo_barras = ?',
-                [codigo_barras]
+                'SELECT codigo_barras, nome, preco_venda, quantidade, tipo_produto FROM produtos WHERE nome = ?',
+                [nome]
             );
             const produto = produtoRows[0];
             if (!produto) {
                 await connection.rollback();
-                throw new Error(`Produto com codigo de barras ${codigo_barras} não encontrado.`);
+                throw new Error(`Produto '${nome}' não encontrado.`);
             }
 
             const preco_unitario = produto.preco_venda;
@@ -127,7 +124,7 @@ router.put('/:pedido/itens', authenticateToken, authorizeRole(['Gerente', 'Vende
                 subtotal = preco_unitario * quantidade;
                 await connection.query(
                     'UPDATE produtos SET quantidade = quantidade - ? WHERE codigo_barras = ?',
-                    [quantidade, codigo_barras]
+                    [quantidade, produto.codigo_barras]
                 );
             } else if (produto.tipo_produto === 'personalizado') {
                 if (!largura || !altura) {
@@ -141,7 +138,7 @@ router.put('/:pedido/itens', authenticateToken, authorizeRole(['Gerente', 'Vende
 
             await connection.query(
                 'INSERT INTO itens_venda (pedido, codigo_barras, quantidade, preco_unitario, subtotal, largura, altura) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [pedido, codigo_barras, quantidade, preco_unitario, subtotal, largura, altura]
+                [pedido, produto.codigo_barras, quantidade, preco_unitario, subtotal, largura, altura]
             );
         }
 
@@ -150,17 +147,9 @@ router.put('/:pedido/itens', authenticateToken, authorizeRole(['Gerente', 'Vende
 
         // 7. Atualiza flags corretamente
         if (venda.edicao_feita === 0) {
-            // Primeira edição → marca como feita
-            await connection.query(
-                'UPDATE vendas SET edicao_feita = 1 WHERE pedido = ?',
-                [pedido]
-            );
+            await connection.query('UPDATE vendas SET edicao_feita = 1 WHERE pedido = ?', [pedido]);
         } else {
-            // Segunda edição em diante → zera autorização após o uso
-            await connection.query(
-                'UPDATE vendas SET autorizacao_edicao = 0 WHERE pedido = ?',
-                [pedido]
-            );
+            await connection.query('UPDATE vendas SET autorizacao_edicao = 0 WHERE pedido = ?', [pedido]);
         }
 
         await connection.commit();
@@ -178,27 +167,6 @@ router.put('/:pedido/itens', authenticateToken, authorizeRole(['Gerente', 'Vende
     }
 });
 
-//Rota para abrir um pedido
-/*
-router.put('/:pedido/liberar-edicao', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
-    const { pedido } = req.params;
-
-    try {
-        const [result] = await db.query(
-            'UPDATE vendas SET autorizacao_edicao = 1 WHERE pedido = ?',
-            [pedido]
-        );
-
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Pedido não encontrado.' });
-        }
-
-        res.status(200).json({ message: 'Edição do pedido liberada com sucesso.' });
-    } catch (error) {
-        console.error('Erro ao liberar edição:', error);
-        res.status(500).json({ message: 'Erro ao liberar edição do pedido.', error: error.message });
-    }
-});*/
 
 // Rota para abrir um pedido (liberar edição)
 router.put('/:pedido/liberar-edicao', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
@@ -232,7 +200,6 @@ router.put('/:pedido/liberar-edicao', authenticateToken, authorizeRole(['Gerente
         res.status(500).json({ message: 'Erro ao liberar edição do pedido.', error: error.message });
     }
 });
-
 
 // Rota para cancelar um pedido
 router.put('/cancelar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
@@ -321,7 +288,6 @@ router.put('/cancelar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), 
         connection.release();
     }
 });
-
 
 //Rota para pesquisar sobre um pedido
 router.get('/:pedido', authenticateToken, async (req, res) => {
