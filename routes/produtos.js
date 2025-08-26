@@ -61,7 +61,29 @@ router.post('/', authenticateToken, authorizeRole(['Gerente', 'Estoquista']), as
     }
 });
 
-// Rota para LISTAR todos os produtos OU BUSCAR por nome/código de referência (READ ALL / SEARCH)
+// Rota para BUSCAR todos os produtos de uma categoria específica
+router.get('/categoria/:categoria', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa', 'Estoquista']), async (req, res) => {
+  const { categoria } = req.params;
+
+  const sql = 'SELECT id, nome, descricao, preco_custo, preco_venda, quantidade, codigo_barras, codigo_referencia, categoria, data_cadastro FROM produtos WHERE categoria = ?';
+  const params = [categoria];
+
+  try {
+    const [rows] = await db.query(sql, params);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Nenhum produto encontrado para esta categoria.' });
+    }
+
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error('Erro ao buscar produtos por categoria:', error);
+    res.status(500).json({ message: 'Erro interno do servidor ao buscar produtos por categoria.', error: error.message });
+  }
+});
+
+
+// Rota para LISTAR todos os produtos OU BUSCAR por nome, código de referência ou de barras (READ ALL / SEARCH)
 router.get('/', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa', 'Estoquista']), async (req, res) => {
   const { search } = req.query; // Parâmetro de busca
 
@@ -69,12 +91,13 @@ router.get('/', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa'
   const params = [];
 
   if (search) {
-    // Adiciona a condição WHERE para buscar por nome OU código de referência
-    sql += ' WHERE nome LIKE ? OR codigo_referencia = ?';
-    params.push(`%${search}%`, search); // % para busca parcial no nome
+    // Adiciona a condição WHERE para buscar por nome, código de barras ou referência
+    sql += ' WHERE nome LIKE ?';
+    params.push(`%${search}%`); // % para busca parcial
   }
 
-  sql += ' ORDER BY nome ASC';
+  // Limita o número de resultados para evitar sobrecarga e ter uma visualização mais organizada
+  sql += ' ORDER BY nome ASC LIMIT 10';
 
   try {
     const [rows] = await db.query(sql, params);
@@ -85,74 +108,49 @@ router.get('/', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa'
   }
 });
 
-// Rota para listar todos os produtos ou buscar por identificador (ID, nome, código de barras ou referência)
+// Rota para BUSCAR um produto específico por um identificador na URL.
+// O identificador pode ser ID, nome, código de referência ou de barras.
 router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa', 'Estoquista']), async (req, res) => {
+  // Captura o identificador da URL (ex: /api/produtos/notebook)
   const { identificador } = req.params;
 
-  let sql = `
-    SELECT id, nome, descricao, preco_custo, preco_venda, quantidade, 
-           codigo_barras, codigo_referencia, categoria, data_cadastro 
-    FROM produtos
-  `;
+  let sql = 'SELECT id, nome, descricao, preco_custo, preco_venda, quantidade, codigo_barras, codigo_referencia, categoria, data_cadastro FROM produtos';
   const params = [];
 
-  // Se tiver um identificador na URL (id, nome, código de barras ou referência)
-  if (identificador) {
-    sql += `
-      WHERE id = ? OR nome = ? OR codigo_barras = ? OR codigo_referencia = ?
-      LIMIT 1
-    `;
-    params.push(identificador, identificador, identificador, identificador);
-  }
+  // A condição WHERE agora usa LIKE para permitir buscas parciais
+  // em todas as colunas de identificação, assim como na sua rota de delete.
+  // O uso de `LOWER()` garante que a busca não diferencie maiúsculas de minúsculas.
+  sql += ' WHERE LOWER(nome) LIKE ?';
+  
+  // Adiciona o identificador aos parâmetros.
+  // Para as buscas parciais, usamos '%' no início e no fim.
+  const searchTerm = `%${identificador.toLowerCase()}%`;
+  params.push(searchTerm);
+
+  // Limita o resultado a 1, já que estamos buscando um item específico.
+  //sql += ' LIMIT 1';
 
   try {
     const [rows] = await db.query(sql, params);
 
-    if (identificador && rows.length === 0) {
-      return res.status(404).json({ message: 'Produto não encontrado.' });
-    }
-
-    res.status(200).json(identificador ? rows[0] : rows);
-  } catch (error) {
-    console.error('Erro ao buscar produtos:', error);
-    res.status(500).json({ message: 'Erro interno do servidor ao buscar produtos.', error: error.message });
-  }
-});
- /*
-router.get('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Vendedor', 'Caixa', 'Estoquista']), async (req, res) => {
-  const { identificador } = req.params;
-
-  // A busca será feita por id exato ou nome/codigo parcial
-  const sql = `
-    SELECT id, nome, descricao, preco_custo, preco_venda, quantidade, 
-           codigo_barras, codigo_referencia, categoria, data_cadastro 
-    FROM produtos
-    WHERE id = ? OR nome LIKE ? OR codigo_barras LIKE ? OR codigo_referencia LIKE ?
-    LIMIT 1
-  `;
-  const params = [identificador, `%${identificador}%`, `%${identificador}%`, `%${identificador}%`];
-
-  try {
-    const [rows] = await db.query(sql, params);
-
-    // Se a busca retornar 0 produtos, envia um 404
     if (rows.length === 0) {
+      // Se nenhum produto for encontrado, retorna 404
       return res.status(404).json({ message: 'Produto não encontrado.' });
     }
 
-    // Retorna o primeiro produto encontrado
+    // Retorna o produto encontrado
     res.status(200).json(rows[0]);
-    
   } catch (error) {
     console.error('Erro ao buscar produto:', error);
     res.status(500).json({ message: 'Erro interno do servidor ao buscar produto.', error: error.message });
   }
 });
-*/
+
+// Nota: A rota anterior (GET com ?search=) ainda é útil para
+// a listagem de produtos com filtros e deve ser mantida se necessário.
 
 
 // Rota para ATUALIZAR um produto (UPDATE)
-
 router.put('/:identificador', authenticateToken, authorizeRole(['Gerente', 'Estoquista']), async (req, res) => {
   const { identificador } = req.params;
   const { nome, descricao, preco_custo, preco_venda, quantidade, codigo_barras, codigo_referencia, categoria } = req.body;
