@@ -27,6 +27,10 @@ Put / http://localhost:3000/vendas/42/itens
 
 Put http://localhost:3000/vendas/56/liberar-edicao
 (Para abrir um pedido)
+{ 
+  "motivo_abertura":"erro na quantidade",
+  "responsavel_abertura":"Mariana"
+}
 
 
 Put / http://localhost:3000/vendas/cancelar
