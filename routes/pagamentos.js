@@ -2,205 +2,6 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db'); // conexão com o banco
 const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware'); 
-/*
-// rota para registrar pagemento por pedido
-router.post('/:pedido/pagar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
-    const { valor_pagamento, forma_pagamento } = req.body;
-    const { pedido } = req.params;
-    const connection = await db.getConnection();
-
-    if (!valor_pagamento || !forma_pagamento) {
-        return res.status(400).json({ message: 'valor_pagamento e forma_pagamento são obrigatórios.' });
-    }
-
-    try {
-        await connection.beginTransaction();
-
-        // 1. Busca o pedido
-        const [vendaRows] = await connection.query(
-            'SELECT cliente_nome, valor_total, valor_pago, status_pedido, status_pagamento FROM vendas WHERE pedido = ? FOR UPDATE',
-            [pedido]
-        );
-        const venda = vendaRows[0];
-
-        if (!venda || ['Cancelada', 'Estornado', 'Concluída'].includes(venda.status_pedido)) {
-            await connection.rollback();
-            return res.status(400).json({ message: `Não é possível registrar pagamento para este pedido (status atual: ${venda?.status_pedido || 'Desconhecido'}).` });
-        }
-
-        // 2. Registra o novo pagamento
-        await connection.query(
-            'INSERT INTO pagamentos (cliente_nome, pedido, valor, forma_pagamento, status_pagamento) VALUES (?, ?, ?, ?, ?)',
-            [venda.cliente_nome, pedido, valor_pagamento, forma_pagamento, 'Pago']
-        );
-
-        // 3. Calcula novo valor pago
-        const novoValorPago = parseFloat(venda.valor_pago) + parseFloat(valor_pagamento);
-
-        let novoStatusPedido = 'Aberto';
-        let novoStatusPagamento = 'Não pago';
-        if (novoValorPago >= venda.valor_total) {
-            novoStatusPedido = 'Concluída';
-            novoStatusPagamento = 'Pago';
-        }
-
-        // 4. Atualiza venda
-        await connection.query(
-            'UPDATE vendas SET valor_pago = ?, status_pedido = ?, status_pagamento = ? WHERE pedido = ?',
-            [novoValorPago, novoStatusPedido, novoStatusPagamento, pedido]
-        );
-
-        // Verifica qual caixa está aberto
-        const [caixaAberto] = await connection.query(
-            "SELECT id FROM caixa WHERE status = 'aberto' ORDER BY data_abertura DESC LIMIT 1"
-        );
-
-        if (!caixaAberto.length) {
-            await connection.rollback();
-            return res.status(400).json({ message: 'Nenhum caixa aberto encontrado. Abra um caixa antes de registrar pagamentos.' });
-        }
-
-        const caixaId = caixaAberto[0].id;
-
-        // 5. Registra movimentação no caixa
-        await connection.query(
-            `INSERT INTO movimentacoes_caixa 
-                (caixa_id, descricao, valor, tipo, observacoes, referencia_venda_id)
-             VALUES (? ,?, ?, ?, ?, ?)`,
-            [
-                caixaId, 
-                `Pagamento de pedido nº ${pedido}`,
-                valor_pagamento,
-                'entrada',
-                `Forma de pagamento: ${forma_pagamento} | Status pedido: ${novoStatusPedido} | Status pagamento: ${novoStatusPagamento}`,
-                pedido
-            ]
-        );
-
-        await connection.commit();
-        res.status(200).json({
-            message: `Pagamento registrado e movimentação lançada no caixa. Novo saldo pago: ${novoValorPago}.`,
-            novo_status: novoStatusPedido
-        });
-
-    } catch (error) {
-        await connection.rollback();
-        console.error('Erro ao registrar pagamento:', error);
-        res.status(500).json({ message: 'Erro interno do servidor ao registrar pagamento.', error: error.message });
-    } finally {
-        connection.release();
-    }
-});
-
-// rota para gerar pagamento por cliente
-router.post('/cliente/:clienteNome/pagar', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
-    const { clienteNome } = req.params;
-    const { valor_pagamento, forma_pagamento } = req.body;
-    const connection = await db.getConnection();
-
-    if (!valor_pagamento || !forma_pagamento) {
-        return res.status(400).json({ message: 'valor_pagamento e forma_pagamento são obrigatórios.' });
-    }
-
-    const valor = parseFloat(valor_pagamento);
-    if (isNaN(valor) || valor <= 0) {
-        return res.status(400).json({ message: 'Valor do pagamento inválido.' });
-    }
-
-    try {
-        await connection.beginTransaction();
-
-        // Buscar todos os pedidos abertos ou parcialmente pagos do cliente, ordenados do mais antigo
-        const [vendasRows] = await connection.query(
-            `SELECT pedido, valor_total, valor_pago, status_pedido
-             FROM vendas
-             WHERE cliente_nome = ? AND status_pedido IN ('Aberto', 'Concluída') 
-             ORDER BY data_venda ASC
-             FOR UPDATE`,
-            [clienteNome]
-        );
-
-        if (vendasRows.length === 0) {
-            await connection.rollback();
-            return res.status(404).json({ message: `Nenhum pedido aberto encontrado para o cliente '${clienteNome}'.` });
-        }
-
-        let restante = valor;
-
-        // Distribuir o pagamento nos pedidos
-        for (const venda of vendasRows) {
-            if (restante <= 0) break;
-
-            const saldoPedido = parseFloat(venda.valor_total) - parseFloat(venda.valor_pago);
-            if (saldoPedido <= 0) continue; // já pago
-
-            const pagoAgora = Math.min(saldoPedido, restante);
-            const novoValorPago = parseFloat(venda.valor_pago) + pagoAgora;
-
-            // Determina o status correto
-            const novoStatusPedido = (novoValorPago >= parseFloat(venda.valor_total)) ? 'Concluída' : venda.status_pedido;
-            const novoStatusPagamento = (novoValorPago >= parseFloat(venda.valor_total)) ? 'Pago' : 'Não pago';
-
-            // Atualiza o pedido
-            await connection.query(
-                'UPDATE vendas SET valor_pago = ?, status_pedido = ?, status_pagamento = ? WHERE pedido = ?',
-                [novoValorPago, novoStatusPedido, novoStatusPagamento, venda.pedido]
-            );
-
-            // Verifica qual caixa está aberto
-            const [caixaAberto] = await connection.query(
-                "SELECT id FROM caixa WHERE status = 'aberto' ORDER BY data_abertura DESC LIMIT 1"
-            );
-
-            if (!caixaAberto.length) {
-                await connection.rollback();
-                return res.status(400).json({ message: 'Nenhum caixa aberto encontrado. Abra um caixa antes de registrar pagamentos.' });
-            }
-
-            const caixaId = caixaAberto[0].id;
-
-            // Movimentação no caixa
-            await connection.query(
-                `INSERT INTO movimentacoes_caixa 
-                    (caixa_id, descricao, valor, tipo, observacoes, referencia_venda_id)
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [
-                    caixaId,
-                    `Pagamento de pedido nº ${venda.pedido} (cliente: ${clienteNome})`,
-                    pagoAgora,
-                    'entrada',
-                    `Forma de pagamento: ${forma_pagamento}`,
-                    venda.pedido
-                ]
-            );
-
-            restante -= pagoAgora;
-        }
-
-        // Registrar pagamento global do cliente
-        await connection.query(
-            'INSERT INTO pagamentos (pedido, valor, forma_pagamento, status_pagamento, cliente_nome) VALUES (?, ?, ?, ?, ?)',
-            [null, valor, forma_pagamento, 'Pago', clienteNome]
-        );
-
-        await connection.commit();
-
-        res.status(200).json({
-            message: `Pagamento registrado para o cliente '${clienteNome}'.`,
-            valor_pago: valor,
-            saldo_restante: restante > 0 ? restante : 0
-        });
-
-    } catch (error) {
-        await connection.rollback();
-        console.error('Erro ao registrar pagamento por cliente:', error);
-        res.status(500).json({ message: 'Erro interno ao registrar pagamento por cliente.', error: error.message });
-    } finally {
-        connection.release();
-    }
-});
-*/
-
 
 // Rota para REGISTRAR pagamento por pedido
 // Agora só atualiza o status de pagamento.
@@ -238,7 +39,7 @@ router.post('/:pedido/pagar', authenticateToken, authorizeRole(['Gerente', 'Caix
         const novoValorPago = parseFloat(venda.valor_pago) + parseFloat(valor_pagamento);
 
         // 4. Determina o novo status de pagamento, sem alterar o status do pedido
-        const novoStatusPagamento = (novoValorPago >= venda.valor_total) ? 'Pago' : 'Aberto';
+        const novoStatusPagamento = (novoValorPago >= venda.valor_total) ? 'Pago' : 'Não Pago';
         
         // 5. Atualiza o valor pago e o status de pagamento na tabela de vendas
         await connection.query(
@@ -276,7 +77,6 @@ router.post('/:pedido/pagar', authenticateToken, authorizeRole(['Gerente', 'Caix
         connection.release();
     }
 });
-
 
 // Rota para REGISTRAR pagamento por cliente
 // Lógica de distribuição do valor entre os pedidos do cliente.
@@ -325,7 +125,7 @@ router.post('/cliente/:clienteNome/pagar', authenticateToken, authorizeRole(['Ge
             const pagoAgora = Math.min(saldoPedido, restante);
             const novoValorPago = parseFloat(venda.valor_pago) + pagoAgora;
 
-            const novoStatusPagamento = (novoValorPago >= parseFloat(venda.valor_total)) ? 'Pago' : 'Aberto';
+            const novoStatusPagamento = (novoValorPago >= parseFloat(venda.valor_total)) ? 'Pago' : 'Não Pago';
 
             await connection.query(
                 'UPDATE vendas SET valor_pago = ?, status_pagamento = ? WHERE pedido = ?',

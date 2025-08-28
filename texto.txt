@@ -32,6 +32,17 @@ Put http://localhost:3000/vendas/56/liberar-edicao
   "responsavel_abertura":"Mariana"
 }
 
+Put http://localhost:3000/vendas/56/itens/substituir/incolor 8 mm temperado
+(alterar a quantidade, tamanho ou itens)
+{
+    "nome_novo": "incolor 8 mm temperado",
+    "quantidade_nova": 1,
+    "largura": 1.2,
+    "altura": 1.2
+}
+
+Put http://localhost:3000/vendas/56/finalizar
+(Para fechar um pedido)
 
 Put / http://localhost:3000/vendas/cancelar
 (cancelar um pedido)
