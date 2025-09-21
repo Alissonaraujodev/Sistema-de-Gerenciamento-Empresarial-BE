@@ -42,10 +42,18 @@ O projeto foi construído com uma arquitetura focada no backend, utilizando as s
 
 - cors: Para controlar o acesso à API por diferentes origens (domínios), permitindo a comunicação com o frontend.
 
-**Próximos Passos**
+**Visão do Projeto e Próximos Passos**
 
 - Melhoria das Funcionalidades: Continuar a otimizar e expandir as funcionalidades existentes, como a geração de relatórios mais dinâmicos.
 
 - Integração com o Frontend: Concluir a comunicação da API com o frontend, que será desenvolvido em um repositório separado.
 
 - Testes: Implementar testes unitários e de integração para garantir a estabilidade do sistema.
+
+- Expansão para Clientes: Criar uma interface pública para que os clientes possam visualizar produtos, valores e realizar orçamentos.
+
+- Implementação de IA: Adicionar um agente de Inteligência Artificial para auxiliar clientes na criação de orçamentos de forma interativa.
+
+- Funcionalidade Offline: Desenvolver a capacidade do sistema de funcionar em modo offline para certas operações.
+
+- Desenvolvimento de Aplicativo Móvel: Criar um aplicativo nativo ou híbrido para dispositivos móveis, expandindo o acesso ao sistema.
