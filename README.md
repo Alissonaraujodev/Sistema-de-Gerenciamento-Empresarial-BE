@@ -1,4 +1,4 @@
-# Sistema de Gerenciamento Empresarial
+# Sistema de Gerenciamento Empresarial - Backend
 
 Este projeto é um sistema de gerenciamento empresarial robusto, focado no backend, desenvolvido para otimizar o controle e a administração de um negócio. Ele oferece um conjunto completo de ferramentas para gerenciar operações diárias, desde o controle de estoque e vendas até a gestão de funcionários e relatórios financeiros, tudo com acesso seguro e restrito.
 
