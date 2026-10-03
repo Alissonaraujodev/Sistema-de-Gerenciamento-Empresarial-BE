@@ -1,5 +1,5 @@
 {
-  "name": "sistemaempresarial",
+  "name": "backend",
   "version": "1.0.0",
   "description": "Sistema de gerenciamento empresarial",
   "main": "app.js",
