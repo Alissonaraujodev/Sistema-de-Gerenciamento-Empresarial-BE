@@ -2,13 +2,13 @@ import express from 'express'
 import cors from 'cors'
 
 import produtosRoutes from './routes/produtosRoutes.js'
-import clientesRoutes from './routes/clientes.js'
-import vendasRoutes from './routes/vendas.js'
-import caixaRoutes from './routes/caixa.js'
-import relatoriosRoutes from './routes/relatorios.js'
-import funcionariosRoutes from './routes/funcionarios.js'
-import authRoutes from './routes/auth.js'
-import pagamentosRoutes from './routes/pagamentos.js'
+import clientesRoutes from './routes/clientesRoutes.js'
+import vendasRoutes from './routes/vendasRoutes.js'
+import caixaRoutes from './routes/caixaRoutes.js'
+import relatoriosRoutes from './routes/relatoriosRoutes.js'
+import funcionariosRoutes from './routes/funcionariosRoutes.js'
+import authRoutes from './routes/authRoutes.js'
+import pagamentosRoutes from './routes/pagamentosRoutes.js'
 
 const app = express()
 
