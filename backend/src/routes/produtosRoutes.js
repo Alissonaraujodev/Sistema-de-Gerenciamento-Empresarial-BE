@@ -1,7 +1,7 @@
 // routes/produtos.js
 const express = require('express');
 const router = express.Router();
-const db = require('../config/db');
+const db = require('../config/database');
 const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware');
 
 // Rota para CADASTRAR um novo produto (CREATE)
@@ -236,6 +236,6 @@ router.delete('/:identificador', authenticateToken, authorizeRole(['Gerente']), 
   }
 });
 
-module.exports = router;
+export default router
 
 

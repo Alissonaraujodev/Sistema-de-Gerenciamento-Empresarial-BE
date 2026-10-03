@@ -1,7 +1,7 @@
 // routes/funcionarios.js
 const express = require('express');
 const router = express.Router();
-const db = require('../config/db');
+const db = require('../config/database');
 const bcrypt = require('bcrypt'); // Importa a biblioteca bcrypt
 const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware'); 
 const { limparDocumento } = require('../utils/limparDocumento');
@@ -225,4 +225,4 @@ router.delete('/:identificador', authenticateToken, authorizeRole(['Gerente']), 
   }
 });
 
-module.exports = router;
+export default router

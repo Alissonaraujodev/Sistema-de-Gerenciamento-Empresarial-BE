@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/db');
+const db = require('../config/database');
 const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware');
 
 // Rota para Gerar Relatório de Vendas Gerais por Período e Status
@@ -139,4 +139,4 @@ router.get('/vendas', authenticateToken, authorizeRole(['Gerente']), async (req,
     }
 });
 
-module.exports = router;
+export default router

@@ -1,7 +1,7 @@
 // routes/auth.js
 const express = require('express');
 const router = express.Router();
-const db = require('../config/db');
+const db = require('../config/database');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken'); // Importa a biblioteca jsonwebtoken
 
@@ -69,4 +69,4 @@ router.post('/login', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

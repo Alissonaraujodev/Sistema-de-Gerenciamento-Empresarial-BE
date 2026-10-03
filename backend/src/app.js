@@ -1,57 +1,36 @@
-require('dotenv').config();
+import express from 'express'
+import cors from 'cors'
 
-const express = require('express');
-const cors = require('cors');
-const app = express();
-const port = process.env.PORT || 3000;
+import produtosRoutes from './routes/produtosRoutes.js'
+import clientesRoutes from './routes/clientes.js'
+import vendasRoutes from './routes/vendas.js'
+import caixaRoutes from './routes/caixa.js'
+import relatoriosRoutes from './routes/relatorios.js'
+import funcionariosRoutes from './routes/funcionarios.js'
+import authRoutes from './routes/auth.js'
+import pagamentosRoutes from './routes/pagamentos.js'
 
-const db = require('./config/db');
+const app = express()
 
-const produtosRoutes = require('./routes/produtos');
-const clientesRoutes = require('./routes/clientes');
-const vendasRoutes = require('./routes/vendas');
-const caixaRoutes = require('./routes/caixa');
-const relatoriosRoutes = require('./routes/relatorios');
-const funcionariosRoutes = require('./routes/funcionarios');
-const authRoutes = require('./routes/auth');
-const pagamentosRoutes = require('./routes/pagamentos');
+// Middlewares
+app.use(cors())
+app.use(express.json())
 
-app.use(cors({ origin: 'http://localhost:5173' }));
-app.use(express.json());
+
+app.use('/auth', authRoutes);
+
+//rotas
+app.use('/produtos', produtosRoutes)
+app.use('/clientes', clientesRoutes)
+app.use('/vendas', vendasRoutes)
+app.use('/caixa', caixaRoutes)
+app.use('/relatorios', relatoriosRoutes)
+app.use('/funcionarios', funcionariosRoutes)
+app.use('/pagamentos', pagamentosRoutes)
 
 app.get('/', (req, res) => {
-  res.send('Bem-vindo ao seu sistema de gestão! O back-end está funcionando.');
-});
-
-app.get('/api/test-db', async (req, res) => {
-    try {
-        const [result] = await db.query('SELECT 1+1 AS solution');
-        res.status(200).json({
-            message: 'Conexão com o banco de dados bem-sucedida!',
-            solution: result[0].solution
-        });
-    } catch (error) {
-        console.error('Erro ao testar conexão com o banco de dados:', error);
-        res.status(500).json({
-            message: 'Erro ao conectar ao banco de dados',
-            error: error.message
-        });
-    }
-});
-
-app.use('/produtos', produtosRoutes);
-app.use('/clientes', clientesRoutes);
-app.use('/vendas', vendasRoutes);
-app.use('/caixa', caixaRoutes);
-app.use('/relatorios', relatoriosRoutes);
-app.use('/funcionarios', funcionariosRoutes);
-app.use('/auth', require('./routes/auth')); 
-app.use('/pagamentos', pagamentosRoutes);
+  res.json({ mensagem: 'Sistema funcionando! 💇‍♀️' })
+})
 
 
-app.listen(port, () => {
-  console.log(`Servidor rodando em http://localhost:${port}`);
-  console.log('Pressione CTRL+C para parar o servidor.');
-});
-
-
+export default app

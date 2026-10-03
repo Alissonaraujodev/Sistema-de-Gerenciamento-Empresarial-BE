@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/db'); // conexão com o banco
+const db = require('../config/database'); // conexão com o banco
 const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware');
 
 // Rota para ABRIR um novo pedido de venda (CREATE)
@@ -675,4 +675,4 @@ router.get('/:nome/relatorio', authenticateToken, authorizeRole(['Gerente', 'Cai
     }
 });
 
-module.exports = router;
+export default router
