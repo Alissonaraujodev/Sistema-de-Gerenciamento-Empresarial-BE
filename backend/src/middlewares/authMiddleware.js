@@ -1,44 +1,44 @@
-// middlewares/authMiddleware.js
-const jwt = require('jsonwebtoken');
+import jwt from 'jsonwebtoken'
 
-// Carrega a chave secreta do JWT das variáveis de ambiente
-const jwtSecret = process.env.JWT_SECRET;
+function autenticar(req, res, next) {
+  const authHeader = req.headers.authorization
 
-const authenticateToken = (req, res, next) => {
-  // Tenta pegar o token do cabeçalho 'Authorization'
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Formato esperado: "Bearer SEU_TOKEN"
-
-  // Se não houver token, o acesso é negado (Não Autorizado)
-  if (!token) {
-    return res.status(401).json({ message: 'Token de autenticação não fornecido.' });
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ erro: 'Token não fornecido' })
   }
 
-  // Verifica se o token é válido
-  jwt.verify(token, jwtSecret, (err, user) => {
-    // Se o token for inválido ou expirou (Forbidden)
-    if (err) {
-      return res.status(403).json({ message: 'Token de autenticação inválido ou expirado.' });
-    }
-    
-    // Se o token for válido, 'user' conterá os dados que você assinou no token (id, email, cargo)
-    req.user = user; // Anexa as informações do usuário à requisição
-    next(); // Chama a próxima função de middleware ou a rota handler
-  });
-};
+  const token = authHeader.split(' ')[1]
 
-// Middleware para verificar a autorização com base no cargo do usuário
-const authorizeRole = (roles) => {
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET)
+    req.usuario = payload
+    next()
+  } catch (error) {
+    return res.status(401).json({ erro: 'Token inválido ou expirado' })
+  }
+}
+
+// Verifica se o cargo está entre os permitidos
+function autorizar(...cargosPermitidos) {
   return (req, res, next) => {
-    // Verifica se o usuário autenticado tem um dos cargos permitidos
-    if (!req.user || !roles.includes(req.user.cargo)) {
-      return res.status(403).json({ message: 'Acesso negado. Você não tem permissão para realizar esta ação.' });
-    }
-    next(); // Se o cargo for permitido, chama a próxima função
-  };
-};
+    const { tipo, cargo } = req.usuario
 
-module.exports = {
-  authenticateToken,
-  authorizeRole
-};
+    // Admin (profissional com cargo 'admin') passa em tudo
+    if (tipo === 'profissional' && cargo === 'administrador') {
+      return next()
+    }
+
+    // Verifica se o tipo ou cargo está na lista de permitidos
+    const temPermissao = cargosPermitidos.some(permitido =>
+      permitido === tipo || permitido === cargo
+    )
+
+    if (!temPermissao) {
+      return res.status(403).json({ erro: 'Acesso não autorizado' })
+    }
+
+    next()
+  }
+}
+
+export { autenticar, autorizar }

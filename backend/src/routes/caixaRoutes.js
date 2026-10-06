@@ -1,5 +1,6 @@
 // routes/caixa.js
-const express = require('express');
+
+/*const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
 const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware');
@@ -420,3 +421,4 @@ router.get('/export/pdf', authenticateToken, authorizeRole(['Gerente', 'Caixa'])
 
 export default router
 
+*/

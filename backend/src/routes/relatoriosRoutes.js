@@ -1,3 +1,4 @@
+/*
 const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
@@ -140,3 +141,4 @@ router.get('/vendas', authenticateToken, authorizeRole(['Gerente']), async (req,
 });
 
 export default router
+*/

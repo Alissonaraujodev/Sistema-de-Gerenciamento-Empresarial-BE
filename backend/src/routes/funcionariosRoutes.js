@@ -1,4 +1,5 @@
 // routes/funcionarios.js
+/*
 const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
@@ -226,3 +227,5 @@ router.delete('/:identificador', authenticateToken, authorizeRole(['Gerente']), 
 });
 
 export default router
+
+*/
