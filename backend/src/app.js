@@ -4,7 +4,7 @@ import cors from 'cors'
 //import produtosRoutes from './routes/produtosRoutes.js'
 import clientesRoutes from './routes/clientesRoutes.js'
 //import vendasRoutes from './routes/vendasRoutes.js'
-//import caixaRoutes from './routes/caixaRoutes.js'
+import caixaRoutes from './routes/caixaRoutes.js'
 //import relatoriosRoutes from './routes/relatoriosRoutes.js'
 //import funcionariosRoutes from './routes/funcionariosRoutes.js'
 import authRoutes from './routes/authRoutes.js'
@@ -23,7 +23,7 @@ app.use('/auth', authRoutes);
 //app.use('/produtos', produtosRoutes)
 app.use('/clientes', clientesRoutes)
 //app.use('/vendas', vendasRoutes)
-//app.use('/caixa', caixaRoutes)
+app.use('/caixa', caixaRoutes)
 //app.use('/relatorios', relatoriosRoutes)
 //app.use('/funcionarios', funcionariosRoutes)
 //app.use('/pagamentos', pagamentosRoutes)

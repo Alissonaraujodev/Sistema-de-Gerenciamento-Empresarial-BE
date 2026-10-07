@@ -1,14 +1,15 @@
-// routes/caixa.js
+// routes/caixaRoutes.js
+import { Router } from 'express'
+import * as caixaController from '../controllers/caixaController.js'
 
-/*const express = require('express');
-const router = express.Router();
-const db = require('../config/database');
-const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware');
-const ExcelJS = require('exceljs');
-const PDFDocument = require('pdfkit');
-const fs = require('fs');
+const router = Router()
 
-// Rota para REGISTRAR uma nova movimentação no caixa
+router.get('/', caixaController.buscarCaixaPorId)
+router.post('/', caixaController.abrirCaixa)
+
+export default router
+
+/*
 router.post('/', authenticateToken, authorizeRole(['Gerente', 'Caixa']), async (req, res) => {
   const { descricao, valor, tipo, observacoes, referencia_venda_id, caixa_id } = req.body;
 
@@ -48,11 +49,6 @@ router.post('/abrir', authenticateToken, authorizeRole(['Gerente', 'Caixa']), as
     if (caixasAbertos.length > 0) {
       return res.status(400).json({ message: 'Já existe um caixa aberto. Feche o caixa atual antes de abrir outro.' });
     }
-
-    const [result] = await db.query(
-      `INSERT INTO caixa (saldo_inicial, saldo_final, responsavel_id, status) VALUES (?, ?, ?, 'aberto')`,
-      [saldo_inicial || 0, saldo_inicial || 0, responsavel_id]
-    );
 
     res.status(201).json({ message: 'Caixa aberto com sucesso!', caixaId: result.insertId });
   } catch (error) {
