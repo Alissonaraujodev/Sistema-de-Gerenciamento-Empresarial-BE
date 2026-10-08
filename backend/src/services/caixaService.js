@@ -27,8 +27,22 @@ async function abrirCaixa(dados, responsavel_id) {
     return buscarCaixaPorId(result.insertId)
 }
 
+async function movimentacaoCaixa(dados) {
+     const { descricao, valor, tipo, observacoes, referencia_venda_id, caixa_id } = dados
+
+     const [result] = await pool.query(
+        `INSERT INTO movimentacoes_caixa 
+            (descricao, valor, tipo, observacoes,  referencia_venda_id, caixa_id)
+        VALUES (?, ?, ?, ?, ?, ?)`,
+        [descricao, valor, tipo, observacoes, referencia_venda_id, caixa_id]
+     )
+
+     return result.insertId
+}
+
 export {
     buscarCaixaPorId,
     verificarCaixaAberto,
-    abrirCaixa
+    abrirCaixa,
+    movimentacaoCaixa
 }

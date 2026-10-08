@@ -42,7 +42,30 @@ async function abrirCaixa(req, res) {
     
 }
 
+async function movimentacaoCaixa(req, res) {
+    try {
+        const { descricao, valor, tipo, observacoes, referencia_venda_id, caixa_id } = req.body;
+
+        if (!descricao || valor === undefined || valor <= 0 || !tipo || (tipo !== 'entrada' && tipo !== 'saida')) {
+            return res.status(400).json({ message: 'Descrição, valor (maior que zero) e tipo (entrada/saida) são obrigatórios.'})
+        }
+
+        if (!caixa_id) {
+            return res.status(400).json({ message: 'O ID do caixa é obrigatório para registrar movimentações.' });
+        }
+
+        const movimentacao = await movimentacaoCaixa.caixaService({
+            descricao, valor, tipo, observacoes, referencia_venda_id, caixa_id
+        })
+        res.status(201).json({ message: 'Caixa movimentado com sucesso!', movimentacao });
+    } catch (error) {
+        console.error('Erro ao movimentar caixa:', error)
+        res.status(500).json({ erro: 'Erro interno do servidor' })
+    }
+}
+
 export {
     buscarCaixaPorId,
-    abrirCaixa
+    abrirCaixa, 
+    movimentacaoCaixa
 }
