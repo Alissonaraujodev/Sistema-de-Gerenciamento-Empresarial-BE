@@ -30,7 +30,7 @@ async function cadastrarCliente(dados) {
     const [result] = await pool.query(
         `INSERT INTO clientes (cnpj, cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [cnpj, nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep]
+        [cnpj, nome, email, telefone, logradouro, numero, complemento ?? null, bairro, cidade, estado, cep]
     )
 
     return buscarClientePorId(result.insertId)
