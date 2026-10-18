@@ -1,9 +1,18 @@
-// routes/produtos.js
+// routes/produtosRoutes.js
+import { Router } from 'express'
+import * as produtosController from '../controllers/produtosController.js'
+//const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware');
+
+const router = Router()
+
+router.get('/', produtosController.listarProdutos)
+router.get('/:id', produtosController.buscarProdutoPorId)
+router.post('/', produtosController.cadastrarProduto)
+
+export default router
+
+
 /*
-const express = require('express');
-const router = express.Router();
-const db = require('../config/database');
-const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware');
 
 // Rota para CADASTRAR um novo produto (CREATE)
 
