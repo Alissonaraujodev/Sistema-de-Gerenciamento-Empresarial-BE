@@ -35,10 +35,10 @@ async function buscarClientePorId(req, res) {
 
 async function cadastrarCliente(req, res) {
   try {
-    const {cnpj, nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep} = req.body
+    const {cnpj, razao_social, nome_contato, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep} = req.body
     
     const obrigatorios = {
-            cnpj, nome, email, telefone, logradouro, numero, bairro, cidade, estado, cep
+            cnpj, razao_social, nome_contato, email, telefone, logradouro, numero, bairro, cidade, estado, cep
         };
 
     const campoAusente = Object.values(obrigatorios).some(
@@ -60,10 +60,10 @@ async function cadastrarCliente(req, res) {
       return res.status(409).json({ erro: 'Já existe um cliente com esse CNPJ' })
     }
 
-    const novoCliente = await clientesService.criarCliente({ cnpj, nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep})
+    const novoCliente = await clientesService.cadastrarCliente({ cnpj, razao_social, nome_contato, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep})
     return res.status(201).json({
             mensagem: 'Cliente cadastrado com sucesso!',
-            funcionario: novoCliente
+            cliente: novoCliente
         })
   } catch (error) {
     console.error('Erro ao ccadastrar cliente:', error)

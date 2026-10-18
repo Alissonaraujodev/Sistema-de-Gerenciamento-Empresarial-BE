@@ -2,7 +2,7 @@ import pool from '../config/database.js'
 
 async function listarClientes() {
   const [rows] = await pool.query(
-    'SELECT * FROM clientes ORDER BY nome'
+    'SELECT * FROM clientes ORDER BY razao_social'
   )
   return rows
 }
@@ -25,12 +25,12 @@ async function buscarClientePorCnpj(cnpj){
 
 async function cadastrarCliente(dados) {
 
-    const {cnpj, nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep} = dados
+    const {cnpj, razao_social, nome_contato, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep} = dados
 
     const [result] = await pool.query(
-        `INSERT INTO clientes (cnpj, cliente_nome, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [cnpj, nome, email, telefone, logradouro, numero, complemento ?? null, bairro, cidade, estado, cep]
+        `INSERT INTO clientes (cnpj, razao_social, nome_contato, email, telefone, logradouro, numero, complemento, bairro, cidade, estado, cep)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [cnpj,razao_social, nome_contato, email, telefone, logradouro, numero, complemento ?? null, bairro, cidade, estado, cep]
     )
 
     return buscarClientePorId(result.insertId)

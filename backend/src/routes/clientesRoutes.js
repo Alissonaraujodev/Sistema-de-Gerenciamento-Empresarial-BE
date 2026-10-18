@@ -5,8 +5,8 @@ import * as clientesController from '../controllers/clientesController.js'
 const router = Router()
 
 router.get('/', clientesController.listarClientes)
-router.get('/:id', clientesController.buscarCliente)
-router.post('/', clientesController.criarCliente)
+router.get('/:id', clientesController.buscarClientePorId)
+router.post('/', clientesController.cadastrarCliente)
 
 
 export default router
