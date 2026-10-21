@@ -8,6 +8,9 @@ const router = Router()
 router.get('/', produtosController.listarProdutos)
 router.get('/:id', produtosController.buscarProdutoPorId)
 router.post('/', produtosController.cadastrarProduto)
+router.get('/estoque/produto/:id', produtosController.buscarProdutoNoEstoquePorId)
+router.post('/alterarEstoque', produtosController.alterarEstoque)
+
 
 export default router
 

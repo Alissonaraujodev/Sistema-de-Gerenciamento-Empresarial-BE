@@ -3,8 +3,8 @@ import cors from 'cors'
 
 import funcionariosRoutes from './routes/funcionariosRoutes.js'
 import clientesRoutes from './routes/clientesRoutes.js'
+import produtosRoutes from './routes/produtosRoutes.js'
 
-//import produtosRoutes from './routes/produtosRoutes.js'
 //import vendasRoutes from './routes/vendasRoutes.js'
 //import caixaRoutes from './routes/caixaRoutes.js'
 //import relatoriosRoutes from './routes/relatoriosRoutes.js'
@@ -23,8 +23,8 @@ app.use(express.json())
 //rotas
 app.use('/funcionarios', funcionariosRoutes)
 app.use('/clientes', clientesRoutes)
+app.use('/produtos', produtosRoutes)
 
-//app.use('/produtos', produtosRoutes)
 //app.use('/vendas', vendasRoutes)
 //app.use('/caixa', caixaRoutes)
 //app.use('/relatorios', relatoriosRoutes)
