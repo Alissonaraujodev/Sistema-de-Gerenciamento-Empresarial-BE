@@ -4,6 +4,7 @@ import cors from 'cors'
 import funcionariosRoutes from './routes/funcionariosRoutes.js'
 import clientesRoutes from './routes/clientesRoutes.js'
 import produtosRoutes from './routes/produtosRoutes.js'
+import estoqueRoutes from './routes/estoqueRoutes.js'
 
 //import vendasRoutes from './routes/vendasRoutes.js'
 //import caixaRoutes from './routes/caixaRoutes.js'
@@ -24,6 +25,7 @@ app.use(express.json())
 app.use('/funcionarios', funcionariosRoutes)
 app.use('/clientes', clientesRoutes)
 app.use('/produtos', produtosRoutes)
+app.use('/estoque', estoqueRoutes)
 
 //app.use('/vendas', vendasRoutes)
 //app.use('/caixa', caixaRoutes)
