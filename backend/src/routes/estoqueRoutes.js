@@ -5,7 +5,7 @@ import * as estoqueController from '../controllers/estoqueController.js'
 
 const router = Router()
 
-router.get('/estoque/produto/:id', estoqueController.buscarProdutoNoEstoquePorId)
-router.post('/alterarEstoque', estoqueController.alterarEstoque)
+router.get('/produto/:id', estoqueController.buscarProdutoNoEstoquePorId)
+router.post('/adicionarProdutoEstoque', estoqueController.adicionarProdutoEstoque)
 
 export default router

@@ -14,8 +14,8 @@ async function buscarProdutoNoEstoquePorId(produto_id) {
     return rows[0] || null
 }
 
-async function cadastrarEstoque(dados) {
-  const {produto_id, quantidade, estoque_minimo } = dados
+async function adicionarProdutoEstoque(dados) {
+  const {produto_id, estoque_minimo } = dados
 
   const [produto] = await pool.query(
     'SELECT id FROM produtos WHERE id = ?',
@@ -35,7 +35,7 @@ async function cadastrarEstoque(dados) {
     throw new Error('Produto já possui registro de estoque')
   }
 
-  if (quantidade < 0 || estoque_minimo < 0) {
+  if (estoque_minimo < 0) {
     throw new Error('As quantidades não podem ser negativas')
   }
 
@@ -43,13 +43,13 @@ async function cadastrarEstoque(dados) {
     `INSERT INTO estoque
       (produto_id, quantidade, estoque_minimo)
      VALUES (?, ?, ?)`,
-    [produto_id, quantidade, estoque_minimo]
+    [produto_id, 0, estoque_minimo]
   )
 
   return buscarProdutoNoEstoquePorId(produto_id)
 
 }
-
+/*
 async function adicionarEstoque(dados) {
   const { produto_id, quantidade } = dados
 
@@ -75,9 +75,8 @@ async function adicionarEstoque(dados) {
 
   return buscarProdutoNoEstoquePorId(produto_id)
 }
-
+*/
 export{
     buscarProdutoNoEstoquePorId,
-    cadastrarEstoque,
-    adicionarEstoque
+    adicionarProdutoEstoque
 }
