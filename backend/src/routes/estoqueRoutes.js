@@ -7,5 +7,7 @@ const router = Router()
 
 router.get('/produto/:id', estoqueController.buscarProdutoNoEstoquePorId)
 router.post('/adicionarProdutoEstoque', estoqueController.adicionarProdutoEstoque)
+router.post('/entradas', estoqueController.registrarEntradaEstoque)
+router.post('/saidas', estoqueController.registrarSaidaEstoque)
 
 export default router
