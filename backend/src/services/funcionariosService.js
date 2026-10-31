@@ -33,6 +33,18 @@ async function buscarFuncionarioPorCpf(cpf) {
     return rows[0];
 }
 
+async function buscarProfissionalPorEmailComSenha(email) {
+  const [rows] = await pool.query(
+    `SELECT id, nome, email, senha, cargo, ativo
+     FROM funcionarios
+     WHERE email = ?
+     LIMIT 1`,
+    [email]
+  )
+
+  return rows[0]
+}
+
 async function cadastrarFuncionario(dados) {
   const { nome, cpf, email, telefone, senha, cargo, logradouro, numero, complemento, bairro, cidade, estado, cep } = dados
 
@@ -50,5 +62,6 @@ export {
     listarFuncionarios,
     buscarFuncionarioPorId,
     buscarFuncionarioPorCpf,
+    buscarProfissionalPorEmailComSenha,
     cadastrarFuncionario
 }

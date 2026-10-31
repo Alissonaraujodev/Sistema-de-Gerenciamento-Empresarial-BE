@@ -18,20 +18,16 @@ function autenticar(req, res, next) {
   }
 }
 
-// Verifica se o cargo está entre os permitidos
 function autorizar(...cargosPermitidos) {
   return (req, res, next) => {
-    const { tipo, cargo } = req.usuario
+    const { cargo } = req.usuario
 
     // Admin (profissional com cargo 'admin') passa em tudo
-    if (tipo === 'profissional' && cargo === 'administrador') {
+    if (cargo === 'administrador') {
       return next()
     }
 
-    // Verifica se o tipo ou cargo está na lista de permitidos
-    const temPermissao = cargosPermitidos.some(permitido =>
-      permitido === tipo || permitido === cargo
-    )
+    const temPermissao = cargosPermitidos.includes(cargo)
 
     if (!temPermissao) {
       return res.status(403).json({ erro: 'Acesso não autorizado' })

@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 
+import authRoutes from './routes/authRoutes.js'
 import funcionariosRoutes from './routes/funcionariosRoutes.js'
 import clientesRoutes from './routes/clientesRoutes.js'
 import produtosRoutes from './routes/produtosRoutes.js'
@@ -9,7 +10,6 @@ import estoqueRoutes from './routes/estoqueRoutes.js'
 //import vendasRoutes from './routes/vendasRoutes.js'
 //import caixaRoutes from './routes/caixaRoutes.js'
 //import relatoriosRoutes from './routes/relatoriosRoutes.js'
-//import authRoutes from './routes/authRoutes.js'
 //import pagamentosRoutes from './routes/pagamentosRoutes.js'
 
 const app = express()
@@ -19,7 +19,7 @@ app.use(cors())
 app.use(express.json())
 
 
-//app.use('/auth', authRoutes);
+app.use('/auth', authRoutes);
 
 //rotas
 app.use('/funcionarios', funcionariosRoutes)
