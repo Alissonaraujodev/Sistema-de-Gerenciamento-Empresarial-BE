@@ -1,12 +1,13 @@
 import { Router } from 'express'
 import * as clientesController from '../controllers/clientesController.js'
-//const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware');
+import { autenticar, autorizar } from '../middlewares/authMiddleware.js'
 
 const router = Router()
+router.use(autenticar)
 
-router.get('/', clientesController.listarClientes)
+router.get('/',autorizar('Vendedor', 'Administrador'), clientesController.listarClientes)
 router.get('/:id', clientesController.buscarClientePorId)
-router.post('/', clientesController.cadastrarCliente)
+router.post('/',autorizar('Administrador'), clientesController.cadastrarCliente)
 
 
 export default router

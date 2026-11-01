@@ -1,9 +1,10 @@
 // routes/produtosRoutes.js
 import { Router } from 'express'
 import * as estoqueController from '../controllers/estoqueController.js'
-//const { authenticateToken, authorizeRole } = require('../middlewares/authMiddleware');
+import { autenticar, autorizar } from '../middlewares/authMiddleware.js'
 
 const router = Router()
+router.use(autenticar)
 
 router.get('/produto/:id', estoqueController.buscarProdutoNoEstoquePorId)
 router.post('/adicionarProdutoEstoque', estoqueController.adicionarProdutoEstoque)
