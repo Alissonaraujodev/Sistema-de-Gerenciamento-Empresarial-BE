@@ -28,12 +28,13 @@ async function abrirCaixa(req, res) {
         if (caixasAbertos.length > 0) {
           return res.status(400).json({ message: 'Já existe um caixa aberto. Feche o caixa atual antes de abrir outro.' });
         }
-        const responsavel_id = req.user.id;
 
-        const caixa = await caixaService.abrirCaixa(
-            { saldo_inicial },
-            responsavel_id
-        );
+        const dados = {
+            ...req.body,
+            funcionario_id: req.usuario.id
+        }
+
+        const caixa = await caixaService.abrirCaixa(dados);
         res.status(201).json({ message: 'Caixa aberto com sucesso!', caixa });
     }catch(error){
         console.error('Erro ao abrir caixa:', error)
@@ -44,7 +45,7 @@ async function abrirCaixa(req, res) {
 
 async function movimentacaoCaixa(req, res) {
     try {
-        const { descricao, valor, tipo, observacoes, referencia_venda_id, caixa_id } = req.body;
+        const { descricao, valor, tipo, referencia_venda_id, caixa_id } = req.body;
 
         if (!descricao || valor === undefined || valor <= 0 || !tipo || (tipo !== 'entrada' && tipo !== 'saida')) {
             return res.status(400).json({ message: 'Descrição, valor (maior que zero) e tipo (entrada/saida) são obrigatórios.'})
@@ -55,7 +56,7 @@ async function movimentacaoCaixa(req, res) {
         }
 
         const movimentacao = await caixaService.movimentacaoCaixa({
-            descricao, valor, tipo, observacoes, referencia_venda_id, caixa_id
+            descricao, valor, tipo, referencia_venda_id, caixa_id
         })
         res.status(201).json({ message: 'Caixa movimentado com sucesso!', movimentacao });
     } catch (error) {

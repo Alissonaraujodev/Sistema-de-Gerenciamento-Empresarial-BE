@@ -1,4 +1,4 @@
-//controllers/produtosController.js
+//controllers/estoqueController.js
 
 import * as estoqueService from '../services/estoqueService.js'
 
@@ -71,7 +71,32 @@ async function adicionarProdutoEstoque(req, res) {
 
 async function registrarEntradaEstoque(req, res) {
   try {
-    const resultado = await estoqueService.registrarEntradaEstoque(req.body)
+    const { produto_id, quantidade, motivo } = req.body
+
+    if (!produto_id || !quantidade || !motivo) {
+            return res.status(400).json({
+                erro: 'Produto, quantidade e motivo são obrigatórios'
+            })
+        }
+
+        if (!Number.isInteger(Number(produto_id)) || Number(produto_id) <= 0) {
+            return res.status(400).json({
+                erro: 'ID do produto inválido'
+            })
+        }
+
+        if (!Number.isFinite(Number(quantidade)) || Number(quantidade) <= 0) {
+            return res.status(400).json({
+                erro: 'A quantidade deve ser maior que zero'
+            })
+        }
+
+    const dados = {
+      ...req.body,
+      funcionario_id: req.usuario.id
+    }
+
+    const resultado = await estoqueService.registrarEntradaEstoque(dados)
     return res.status(201).json(resultado)
   } catch (erro) {
     return res.status(400).json({ erro: erro.message })
@@ -80,7 +105,32 @@ async function registrarEntradaEstoque(req, res) {
 
 async function registrarSaidaEstoque(req, res) {
   try {
-    const resultado = await estoqueService.registrarSaidaEstoque(req.body)
+    const { produto_id, quantidade, motivo } = req.body
+
+        if (!produto_id || !quantidade || !motivo) {
+            return res.status(400).json({
+                erro: 'Produto, quantidade e motivo são obrigatórios'
+            })
+        }
+
+        if (!Number.isInteger(Number(produto_id)) || Number(produto_id) <= 0) {
+            return res.status(400).json({
+                erro: 'ID do produto inválido'
+            })
+        }
+
+        if (!Number.isFinite(Number(quantidade)) || Number(quantidade) <= 0) {
+            return res.status(400).json({
+                erro: 'A quantidade deve ser maior que zero'
+            })
+        }
+        
+    const dados = {
+      ...req.body,
+      funcionario_id: req.usuario.id
+    }
+
+    const resultado = await estoqueService.registrarSaidaEstoque(dados)
     return res.status(201).json(resultado)
   } catch (erro) {
     return res.status(400).json({ erro: erro.message })

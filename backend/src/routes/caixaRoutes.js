@@ -7,10 +7,10 @@ const router = Router()
 router.use(autenticar)
 
 router.get('/:id', caixaController.buscarCaixaPorId)
-router.post('/', caixaController.abrirCaixa)
-router.post('/movimentacao', caixaController.movimentacaoCaixa)
-router.get('/:id/totais', caixaController.calcularTotaisCaixa);
-router.put('/:id/fechar', caixaController.fecharCaixa)
+router.post('/', autorizar('Caixa'), caixaController.abrirCaixa)
+router.post('/movimentacao', autorizar('Caixa'), caixaController.movimentacaoCaixa)
+router.get('/:id/totais', autorizar('Caixa'), caixaController.calcularTotaisCaixa);
+router.put('/:id/fechar', autorizar('Caixa'), caixaController.fecharCaixa)
 
 export default router
 

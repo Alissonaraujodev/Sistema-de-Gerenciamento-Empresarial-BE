@@ -7,8 +7,8 @@ import { autenticar, autorizar } from '../middlewares/authMiddleware.js'
 const router = Router()
 router.use(autenticar)
 
-router.get('/', funcionariosController.listarFuncionarios)
-router.get('/:id', funcionariosController.buscarFuncionarioPorId)
-router.post('/', funcionariosController.cadastrarFuncionario)
+router.get('/', autorizar('Admnistrador'), funcionariosController.listarFuncionarios)
+router.get('/:id', autorizar('Admnistrador'), funcionariosController.buscarFuncionarioPorId)
+router.post('/', autorizar('Admnistrador'), funcionariosController.cadastrarFuncionario)
 
 export default router

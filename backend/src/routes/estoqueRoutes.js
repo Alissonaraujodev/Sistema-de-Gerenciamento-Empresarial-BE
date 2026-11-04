@@ -7,8 +7,8 @@ const router = Router()
 router.use(autenticar)
 
 router.get('/produto/:id', estoqueController.buscarProdutoNoEstoquePorId)
-router.post('/adicionarProdutoEstoque', estoqueController.adicionarProdutoEstoque)
-router.post('/entradas', estoqueController.registrarEntradaEstoque)
-router.post('/saidas', estoqueController.registrarSaidaEstoque)
+router.post('/adicionarProdutoEstoque',autorizar('Administrador'), estoqueController.adicionarProdutoEstoque)
+router.post('/entradas',autorizar('Estoquista'), estoqueController.registrarEntradaEstoque)
+router.post('/saidas',autorizar('Estoquista', 'Vendedor'), estoqueController.registrarSaidaEstoque)
 
 export default router
