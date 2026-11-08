@@ -23,7 +23,7 @@ function autorizar(...cargosPermitidos) {
     const { cargo } = req.usuario
 
     // Admin (profissional com cargo 'admin') passa em tudo
-    if (cargo === 'administrador') {
+    if (cargo === 'Administrador') {
       return next()
     }
 

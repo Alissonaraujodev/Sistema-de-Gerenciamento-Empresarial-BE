@@ -8,6 +8,6 @@ router.use(autenticar)
 
 router.get('/', produtosController.listarProdutos)
 router.get('/:id', produtosController.buscarProdutoPorId)
-router.post('/', autorizar('Admnistrador'), produtosController.cadastrarProduto)
+router.post('/', autorizar('Administrador'), produtosController.cadastrarProduto)
 
 export default router
