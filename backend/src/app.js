@@ -6,8 +6,8 @@ import funcionariosRoutes from './routes/funcionariosRoutes.js'
 import clientesRoutes from './routes/clientesRoutes.js'
 import produtosRoutes from './routes/produtosRoutes.js'
 import estoqueRoutes from './routes/estoqueRoutes.js'
+import pedidosRoutes from './routes/pedidosRoutes.js'
 
-//import vendasRoutes from './routes/vendasRoutes.js'
 //import caixaRoutes from './routes/caixaRoutes.js'
 //import relatoriosRoutes from './routes/relatoriosRoutes.js'
 //import pagamentosRoutes from './routes/pagamentosRoutes.js'
@@ -26,8 +26,8 @@ app.use('/funcionarios', funcionariosRoutes)
 app.use('/clientes', clientesRoutes)
 app.use('/produtos', produtosRoutes)
 app.use('/estoque', estoqueRoutes)
+app.use('/pedidos', pedidosRoutes)
 
-//app.use('/vendas', vendasRoutes)
 //app.use('/caixa', caixaRoutes)
 //app.use('/relatorios', relatoriosRoutes)
 //app.use('/pagamentos', pagamentosRoutes)

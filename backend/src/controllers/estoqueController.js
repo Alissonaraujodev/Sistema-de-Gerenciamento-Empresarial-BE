@@ -113,6 +113,12 @@ async function registrarSaidaEstoque(req, res) {
             })
         }
 
+        if (req.usuario.cargo === 'Vendedor' &&motivo !== 'Venda') {
+            return res.status(403).json({
+                erro: 'Vendedores só podem registrar saídas por venda'
+          })
+        }
+
         if (!Number.isInteger(Number(produto_id)) || Number(produto_id) <= 0) {
             return res.status(400).json({
                 erro: 'ID do produto inválido'

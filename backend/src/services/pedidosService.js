@@ -1,4 +1,6 @@
 import pool from '../config/database.js'
+import { registrarSaidaEstoqueNaTransacao } from './estoqueService.js'
+
 
 async function listarPedidos() {
     const [rows] = await pool.query(
@@ -7,13 +9,37 @@ async function listarPedidos() {
   return rows
 }
 
-async function buscarPerdidoPorId(id) {
+async function buscarPedidoPorId(id) {
     const [rows] = await pool.query(
     'SELECT * FROM pedidos WHERE id = ?',
     [id]
   )
   return rows[0]
     
+}
+
+async function verificarPedidoAberto(conexao, pedido_id) {
+    const [rows] = await conexao.query(
+        `SELECT id, status, desconto_percentual
+         FROM pedidos
+         WHERE id = ?
+         FOR UPDATE`,
+        [pedido_id]
+    )
+
+    const pedido = rows[0]
+
+    if (!pedido) {
+        const erro = new Error('Pedido não encontrado')
+        erro.statusCode = 404
+        throw erro
+    }
+
+    if (pedido.status !== 'ABERTO') {
+        throw new Error('O pedido não está aberto')
+    }
+
+    return pedido
 }
 
 async function abrirPedido(dados) {
@@ -24,7 +50,7 @@ async function abrirPedido(dados) {
     [cliente_id, funcionario_id]
   )
 
-  return buscarPerdidoPorId(result.insertId)
+  return buscarPedidoPorId(result.insertId)
 }
 
 async function adicionarItemPedido(dados) {
@@ -42,15 +68,7 @@ async function adicionarItemPedido(dados) {
     try {
         await conexao.beginTransaction()
 
-        // Verificar se o pedido existe e está aberto
-        const [pedidoRows] = await conexao.query(
-            `SELECT status FROM pedidos
-             WHERE id = ?
-             FOR UPDATE`,
-            [pedido_id]
-        )
-
-        const pedido = pedidoRows[0]
+        const pedido = await verificarPedidoAberto(conexao, pedido_id)
 
         if (!pedido) {
             throw new Error('Pedido não encontrado')
@@ -159,9 +177,125 @@ async function adicionarItemPedido(dados) {
     }
 }
 
+async function finalizarPedido(pedido_id, funcionario_id) {
+
+    const conexao = await pool.getConnection()
+
+    try {
+        await conexao.beginTransaction()
+
+        const pedido = await verificarPedidoAberto(conexao, pedido_id)
+
+        if (!pedido) {
+            throw new Error('Pedido não encontrado')
+        }
+
+        if (pedido.status !== 'ABERTO') {
+            throw new Error(
+                'Somente pedidos abertos podem ser finalizados'
+            )
+        }
+
+        // 2. Buscar itens agrupados por produto
+        const [itens] = await conexao.query(
+            `SELECT
+                ip.produto_id,
+                SUM(ip.quantidade) AS quantidade,
+                p.nome,
+                p.unidade_medida
+             FROM itens_pedido ip
+             INNER JOIN produtos p
+                ON p.id = ip.produto_id
+             WHERE ip.pedido_id = ?
+             GROUP BY
+                ip.produto_id,
+                p.nome,
+                p.unidade_medida
+             ORDER BY ip.produto_id`,
+            [pedido_id]
+        )
+
+        if (itens.length === 0) {
+            throw new Error(
+                'Não é possível finalizar um pedido sem itens'
+            )
+        }
+
+        // 3. Movimentar estoque
+        for (const item of itens) {
+
+            if (
+                item.unidade_medida === 'Unidade' ||
+                item.unidade_medida === 'Metro linear'
+            ) {
+
+                await registrarSaidaEstoqueNaTransacao(
+                    conexao,
+                    {
+                        produto_id: item.produto_id,
+                        funcionario_id,
+                        quantidade: item.quantidade,
+                        pedido_id,
+                        observacao: `Saída referente ao pedido ${pedido_id}`
+                    }
+                )
+            }
+        }
+
+        // 4. Recalcular total do pedido
+        const [totalRows] = await conexao.query(
+            `SELECT
+                COALESCE(
+                    SUM(
+                        ip.quantidade *
+                        ip.preco_unitario *
+                        (1 - ip.desconto_percentual / 100)
+                    ),
+                    0
+                ) * (1 - p.desconto_percentual / 100) AS total
+             FROM pedidos p
+             LEFT JOIN itens_pedido ip
+                ON ip.pedido_id = p.id
+             WHERE p.id = ?
+             GROUP BY p.id, p.desconto_percentual`,
+            [pedido_id]
+        )
+
+        const novoTotal = totalRows[0].total
+
+        // 5. Atualizar pedido
+        await conexao.query(
+            `UPDATE pedidos
+             SET total = ?,
+                 status = 'FINALIZADO'
+             WHERE id = ?`,
+            [novoTotal, pedido_id]
+        )
+
+        await conexao.commit()
+
+        return {
+            mensagem: 'Pedido finalizado com sucesso',
+            pedido_id,
+            total: novoTotal,
+            status: 'FINALIZADO'
+        }
+
+    } catch (erro) {
+
+        await conexao.rollback()
+        throw erro
+
+    } finally {
+        conexao.release()
+    }
+}
+
 export{
     listarPedidos,
-    buscarPerdidoPorId,
+    buscarPedidoPorId,
+    verificarPedidoAberto,
     abrirPedido,
-    adicionarItemPedido
+    adicionarItemPedido,
+    finalizarPedido
 }
