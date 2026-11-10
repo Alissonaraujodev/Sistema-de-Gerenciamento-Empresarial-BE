@@ -3,7 +3,7 @@ import pool from '../config/database.js'
 
 async function buscarCaixaPorId(id) {
     const [rows] = await pool.query(
-        `SELECT * FROM caixas WHERE id = ?`,
+        `SELECT * FROM caixa WHERE id = ?`,
         [id]
     );
     return rows[0]
@@ -11,30 +11,30 @@ async function buscarCaixaPorId(id) {
 
 async function verificarCaixaAberto() {
     const [rows] = await pool.query(
-        `SELECT id FROM caixa WHERE status = 'aberto' LIMIT 1`
+        `SELECT id FROM caixa WHERE status = 'Aberto' LIMIT 1`
     );
     return rows
 }
 
-async function abrirCaixa(dados, responsavel_id) {
-    const { saldo_inicial } = dados;
+async function abrirCaixa(dados, funcionario_abertura_id) {
+    const { valor_inicial, funcionario_abertura_id } = dados;
 
     const [result] = await pool.query(
-        `INSERT INTO caixa (saldo_inicial, responsavel_id, status) VALUES (?, ?, 'aberto')`,
-        [saldo_inicial, responsavel_id]
+        `INSERT INTO caixa (valor_inicial, funcionario_abertura_id, status) VALUES (?, ?, 'Aberto')`,
+        [valor_inicial, funcionario_abertura_id]
     );
 
     return buscarCaixaPorId(result.insertId)
 }
 
 async function movimentacaoCaixa(dados) {
-     const { descricao, valor, tipo, observacoes, referencia_venda_id, caixa_id } = dados
+     const { caixa_id, recebimento_id, funcionario_id, tipo, categoria, descricao, valor } = dados
 
      const [result] = await pool.query(
         `INSERT INTO movimentacoes_caixa 
-            (descricao, valor, tipo, observacoes,  referencia_venda_id, caixa_id)
-        VALUES (?, ?, ?, ?, ?, ?)`,
-        [descricao, valor, tipo, observacoes ?? null, referencia_venda_id ?? null, caixa_id]
+            (caixa_id, recebimento_id, funcionario_id, tipo, categoria, descricao, valor)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [caixa_id, recebimento_id, funcionario_id, tipo, categoria, descricao, valor]
      )
 
      return result.insertId
@@ -44,10 +44,10 @@ async function calcularTotaisCaixa(caixa_id) {
     const [rows] = await pool.query(
         `SELECT 
             COALESCE
-                (SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END), 0
+                (SUM(CASE WHEN tipo = 'Entrada' THEN valor ELSE 0 END), 0
             ) AS total_entradas,
             COALESCE(
-                SUM(CASE WHEN tipo = 'saida' THEN valor ELSE 0 END), 0
+                SUM(CASE WHEN tipo = 'Saida' THEN valor ELSE 0 END), 0
             ) AS total_saidas
         FROM movimentacoes_caixa 
         WHERE caixa_id = ?`, 
@@ -60,16 +60,18 @@ async function calcularTotaisCaixa(caixa_id) {
 }
 
 async function fecharCaixa(dados) {
-    const { caixa_id, saldo_final } = dados
+    const { caixa_id, valor_fechamento, funcionario_fechamento_id, valor_fechamento_esperado } = dados
     const [results] = await pool.query(
         `UPDATE caixa 
         SET data_fechamento = NOW(), 
-            saldo_final = ?, 
-            status = 'fechado'
-        WHERE id = ? AND status = 'aberto'`, 
-        [caixa_id, saldo_final]
+            funcionario_fechamento_id = ?,
+            valor_fechamento_esperado = ?,
+            valor_fechamento = ?, 
+            status = 'Fechado'
+        WHERE id = ? AND status = 'Aberto'`, 
+        [funcionario_fechamento_id, valor_fechamento_esperado, valor_fechamento, caixa_id]
     )
-    if (result.affectedRows === 0) {
+    if (results.affectedRows === 0) {
         return null;
     }
 
