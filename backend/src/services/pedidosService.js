@@ -272,6 +272,24 @@ async function finalizarPedido(pedido_id, funcionario_id) {
             [novoTotal, pedido_id]
         )
 
+        // 6. Criar conta a receber
+        await conexao.query(
+            `INSERT INTO contas_receber (
+                pedido_id,
+                cliente_id,
+                numero_parcela,
+                valor_original
+            )
+            SELECT
+                id,
+                cliente_id,
+                1,
+                ?
+            FROM pedidos
+            WHERE id = ?`,
+        [novoTotal, pedido_id]
+        )
+
         await conexao.commit()
 
         return {
@@ -280,6 +298,7 @@ async function finalizarPedido(pedido_id, funcionario_id) {
             total: novoTotal,
             status: 'FINALIZADO'
         }
+
 
     } catch (erro) {
 
