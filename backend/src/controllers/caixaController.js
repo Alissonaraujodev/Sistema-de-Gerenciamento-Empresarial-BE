@@ -17,9 +17,21 @@ async function buscarCaixaPorId(req, res) {
     }
 }
 
+async function listarCaixas(req, res) {
+    try {
+        const caixas = await caixaService.listarCaixas()
+        res.json(caixas)
+      } catch (error) {
+        console.error('Erro ao listar caixas:', error)
+        res.status(500).json({ erro: 'Erro interno do servidor' })
+      }
+}
+
 async function abrirCaixa(req, res) {
     try{
-        const { valor_inicial } = req.body
+
+        const { valor_inicial }= req.body
+
         if(
             valor_inicial === undefined || 
             valor_inicial === null||
@@ -183,6 +195,7 @@ async function fecharCaixa(req, res) {
 
 export {
     buscarCaixaPorId,
+    listarCaixas,
     abrirCaixa, 
     movimentacaoCaixa,
     calcularTotaisCaixa,

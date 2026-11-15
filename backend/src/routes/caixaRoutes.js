@@ -7,6 +7,7 @@ const router = Router()
 router.use(autenticar)
 
 router.get('/:id', caixaController.buscarCaixaPorId)
+router.get('/',  autorizar('Auxiliar Financeiro'), caixaController.listarCaixas)
 router.post('/', autorizar('Auxiliar Financeiro'), caixaController.abrirCaixa)
 router.post('/movimentacao', autorizar('Auxiliar Financeiro'), caixaController.movimentacaoCaixa)
 router.get('/:id/totais', autorizar('Auxiliar Financeiro'), caixaController.calcularTotaisCaixa);

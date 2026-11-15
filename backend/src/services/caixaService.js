@@ -9,6 +9,13 @@ async function buscarCaixaPorId(id) {
     return rows[0]
 }
 
+async function listarCaixas() {
+    const [rows] = await pool.query(
+    'SELECT * FROM caixa ORDER BY data_abertura DESC'
+  )
+  return rows
+}
+
 async function verificarCaixaAberto() {
     const [rows] = await pool.query(
         `SELECT id FROM caixa WHERE status = 'Aberto' LIMIT 1`
@@ -16,7 +23,7 @@ async function verificarCaixaAberto() {
     return rows
 }
 
-async function abrirCaixa(dados, funcionario_abertura_id) {
+async function abrirCaixa(dados) {
     const { valor_inicial, funcionario_abertura_id } = dados;
 
     const [result] = await pool.query(
@@ -27,6 +34,8 @@ async function abrirCaixa(dados, funcionario_abertura_id) {
     return buscarCaixaPorId(result.insertId)
 }
 
+
+/*
 async function movimentacaoCaixa(dados) {
      const { caixa_id, recebimento_id, funcionario_id, tipo, categoria, descricao, valor } = dados
 
@@ -39,7 +48,7 @@ async function movimentacaoCaixa(dados) {
 
      return result.insertId
 }
-
+*/
 async function calcularTotaisCaixa(caixa_id) {
     const [rows] = await pool.query(
         `SELECT 
@@ -80,9 +89,9 @@ async function fecharCaixa(dados) {
 
 export {
     buscarCaixaPorId,
+    listarCaixas,
     verificarCaixaAberto,
     abrirCaixa,
-    movimentacaoCaixa,
     calcularTotaisCaixa,
     fecharCaixa
 }
