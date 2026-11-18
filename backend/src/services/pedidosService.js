@@ -272,22 +272,32 @@ async function finalizarPedido(pedido_id, funcionario_id) {
             [novoTotal, pedido_id]
         )
 
+        const dataVencimento = new Date();
+        dataVencimento.setDate(dataVencimento.getDate() + 30);
+
+        const ano = dataVencimento.getFullYear();
+        const mes = String(dataVencimento.getMonth() + 1).padStart(2, '0');
+        const dia = String(dataVencimento.getDate()).padStart(2, '0');
+
+        const vencimento = `${ano}-${mes}-${dia}`
         // 6. Criar conta a receber
         await conexao.query(
             `INSERT INTO contas_receber (
                 pedido_id,
                 cliente_id,
                 numero_parcela,
-                valor_original
+                valor_original,
+                data_vencimento
             )
             SELECT
                 id,
                 cliente_id,
                 1,
+                ?,
                 ?
             FROM pedidos
             WHERE id = ?`,
-        [novoTotal, pedido_id]
+        [novoTotal,vencimento, pedido_id]
         )
 
         await conexao.commit()
