@@ -1,6 +1,16 @@
 import pool from '../config/database.js'
-import { buscarTotalRecebidoPorContaNaTransacao, registrarAlocacao } from './alocacoesRecebimentoService.js';
-import { buscarEbloquearContasNaTransacao, alterarStatusContaNaTransacao } from './contasReceberService.js';
+import { 
+    buscarTotalRecebidoPorContaNaTransacao, 
+    registrarAlocacao, 
+    listarContasPorRecebimentoNaTransacao 
+} from './alocacoesRecebimentoService.js';
+
+import { 
+    buscarEbloquearContasNaTransacao, 
+    atualizarStatusContaNaTransacao 
+} from './contasReceberService.js';
+
+const valorEmCentavos = valor => Math.round(Number(valor) * 100);
 
 async function buscarRecebimentoPorId(id) {
     const [rows] = await pool.query(
@@ -28,6 +38,51 @@ async function listarRecebimentosPorCliente(cliente_id) {
     return rows[0]
 }
 
+function validarDadosRecebimento(dados) {
+    const { cliente_id, funcionario_id, valor_total, forma_pagamento, alocacoes } = dados;
+
+    if (
+        !cliente_id ||
+        !funcionario_id ||
+        !forma_pagamento ||
+        !Number.isFinite(Number(valor_total)) ||
+        Number(valor_total) <= 0
+    ) {
+        throw new Error('Dados do recebimento inválidos');
+    }
+
+    if (!Array.isArray(alocacoes) || alocacoes.length === 0) {
+        throw new Error('Informe as contas que receberão o pagamento');
+    }
+
+    const contasIds = alocacoes.map(item => Number(item.conta_receber_id));
+
+    if (
+        contasIds.some(id => !Number.isInteger(id) || id <= 0) ||
+        new Set(contasIds).size !== contasIds.length
+    ) {
+        throw new Error('Contas informadas inválidas ou duplicadas');
+    }
+
+    const totalAlocado = alocacoes.reduce((total, item) => {
+        const valor = Number(item.valor_alocado);
+
+        if (!Number.isFinite(valor) || valor <= 0) {
+            throw new Error('Valor de alocação inválido');
+        }
+
+        return total + valorEmCentavos(valor);
+    }, 0);
+
+    if (totalAlocado !== valorEmCentavos(valor_total)) {
+        throw new Error(
+            'A soma das alocações deve ser igual ao valor do recebimento'
+        );
+    }
+
+    return contasIds;
+}
+
 async function registrarRecebimento(dados) {
     const {
         cliente_id,
@@ -39,58 +94,15 @@ async function registrarRecebimento(dados) {
         alocacoes
     } = dados;
 
+    // 1. Validar dados básicos (sem tocar no banco)
+    const contasIds = validarDadosRecebimento(dados);
+
     const conexao = await pool.getConnection();
 
     try {
         await conexao.beginTransaction();
 
-        // 1. Validar dados básicos
-        if (
-            !cliente_id ||
-            !funcionario_id ||
-            !Number.isFinite(Number(valor_total)) ||
-            Number(valor_total) <= 0
-        ) {
-            throw new Error('Dados do recebimento inválidos');
-        }
-
-        if (!Array.isArray(alocacoes) || alocacoes.length === 0) {
-            throw new Error('Informe as contas que receberão o pagamento');
-        }
-
-        const valorEmCentavos = valor =>
-            Math.round(Number(valor) * 100);
-
-        const totalRecebimento = valorEmCentavos(valor_total);
-
-        const contasIds = alocacoes.map(
-            item => Number(item.conta_receber_id)
-        );
-
-        if (
-            contasIds.some(id => !Number.isInteger(id) || id <= 0) ||
-            new Set(contasIds).size !== contasIds.length
-        ) {
-            throw new Error('Contas informadas inválidas ou duplicadas');
-        }
-
-        const totalAlocado = alocacoes.reduce((total, item) => {
-            const valor = Number(item.valor_alocado);
-
-            if (!Number.isFinite(valor) || valor <= 0) {
-                throw new Error('Valor de alocação inválido');
-            }
-
-            return total + valorEmCentavos(valor);
-        }, 0);
-
-        if (totalAlocado !== totalRecebimento) {
-            throw new Error(
-                'A soma das alocações deve ser igual ao valor do recebimento'
-            );
-        }
-
-        // Buscar e bloquear as contas
+        // 2. Buscar e bloquear as contas
         const contas = await buscarEbloquearContasNaTransacao(
             conexao,
             contasIds
@@ -116,26 +128,24 @@ async function registrarRecebimento(dados) {
                 throw new Error('Não é possível receber em uma conta cancelada');
             }
 
-            // Buscar total já recebido na conta
-            const recebidos = await buscarTotalRecebidoPorContaNaTransacao(
+            // buscarTotalRecebido... já retorna um Number (não um array de linhas)
+            const totalRecebido = await buscarTotalRecebidoPorContaNaTransacao(
                 conexao,
                 conta.id
             );
 
             const saldoDevedor =
                 valorEmCentavos(conta.valor_original) -
-                valorEmCentavos(recebidos[0].total_recebido);
+                valorEmCentavos(totalRecebido);
 
-            if (
-                valorEmCentavos(alocacao.valor_alocado) > saldoDevedor
-            ) {
+            if (valorEmCentavos(alocacao.valor_alocado) > saldoDevedor) {
                 throw new Error(
                     `O valor alocado ultrapassa o saldo da conta ${conta.id}`
                 );
             }
         }
 
-        // 4. Registrar recebimento
+        // 4. Registrar recebimento (status explícito, pois os totais só somam 'Confirmado')
         const [resultado] = await conexao.query(
             `INSERT INTO recebimentos (
                 cliente_id,
@@ -143,8 +153,9 @@ async function registrarRecebimento(dados) {
                 valor_total,
                 forma_pagamento,
                 referencia,
-                observacao
-            ) VALUES (?, ?, ?, ?, ?, ?)`,
+                observacao,
+                status
+            ) VALUES (?, ?, ?, ?, ?, ?, 'Confirmado')`,
             [
                 cliente_id,
                 funcionario_id,
@@ -192,60 +203,6 @@ async function registrarRecebimento(dados) {
     }
 }
 
-async function atualizarStatusContaNaTransacao(conexao, id) {
-    
-    // 1. Buscar e bloquear conta
-    const contas = await buscarEbloquearContasNaTransacao(
-        conexao,
-        [id]
-    );
-
-    if (contas.length === 0) {
-        throw new Error('Conta a receber não encontrada');
-    }
-
-    const conta = contas[0];
-
-    if (conta.status === 'Cancelada') {
-        throw new Error('Não é possível atualizar uma conta cancelada');
-    }
-
-    // 2. Calcular total recebido
-    const centavos = valor => Math.round(Number(valor) * 100);
-
-    const original = centavos(conta.valor_original);
-
-    const recebido = centavos(
-        await buscarTotalRecebidoPorContaNaTransacao(
-            conexao,
-            id
-        )
-    );
-
-    if (recebido > original) {
-        throw new Error('Total recebido ultrapassa o valor da conta');
-    }
-
-    let status;
-
-    if (recebido === original) {
-        status = 'Paga';
-    } else if (recebido > 0) {
-        status = 'Parcial';
-    } else {
-        status = 'Aberta';
-    }
-
-    // 4. Atualizar status
-    await alterarStatusContaNaTransacao(
-        conexao,
-        id,
-        status
-    );
-
-    return status;
-}
-
 async function buscarEbloquearRecebimentoNaTransacao(conexao, id) {
     const [rows] = await conexao.query(
         `SELECT id, status
@@ -279,10 +236,7 @@ async function estornarRecebimento(id) {
         await conexao.beginTransaction();
 
         // 1. Buscar e bloquear recebimento
-        const recebimento = await buscarEbloquearRecebimentoNaTransacao(
-            conexao,
-            id
-        );
+        const recebimento = await buscarEbloquearRecebimentoNaTransacao(conexao, id);
 
         if (!recebimento) {
             throw new Error('Recebimento não encontrado');
@@ -293,10 +247,7 @@ async function estornarRecebimento(id) {
         }
 
         // 2. Buscar contas vinculadas ao recebimento
-        const contasIds = await listarContasPorRecebimentoNaTransacao(
-            conexao,
-            id
-        );
+        const contasIds = await listarContasPorRecebimentoNaTransacao(conexao, id);
 
         // 3. Bloquear contas envolvidas
         if (contasIds.length > 0) {
@@ -313,10 +264,7 @@ async function estornarRecebimento(id) {
         }
 
         // 4. Estornar recebimento
-        await marcarRecebimentoComoEstornadoNaTransacao(
-            conexao,
-            id
-        );
+        await marcarRecebimentoComoEstornadoNaTransacao(conexao, id);
 
         // 5. Recalcular status das contas envolvidas
         for (const conta_id of contasIds) {
@@ -342,4 +290,14 @@ async function estornarRecebimento(id) {
     } finally {
         conexao.release();
     }
+}
+
+export {
+    buscarRecebimentoPorId,
+    listarRecebimentos,
+    listarRecebimentosPorCliente,
+    registrarRecebimento,
+    buscarEbloquearRecebimentoNaTransacao,
+    marcarRecebimentoComoEstornadoNaTransacao,
+    estornarRecebimento
 }

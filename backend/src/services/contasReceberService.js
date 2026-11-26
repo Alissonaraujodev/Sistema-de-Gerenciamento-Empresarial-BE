@@ -1,6 +1,8 @@
 import pool from '../config/database.js'
 import { buscarTotalRecebidoPorContaNaTransacao } from './alocacoesRecebimentoService.js';
 
+const centavos = valor => Math.round(Number(valor) * 100);
+
 async function buscarContaReceberPorId(id) {
     const [rows] = await pool.query(
         `SELECT * FROM contas_receber WHERE id = ?`,
@@ -30,10 +32,10 @@ async function listarContasReceberPorCliente(cliente_id) {
 async function listarContasAbertasPorCliente(cliente_id) {
     const [rows] = await pool.query(
         `SELECT *
-         FROM contas_receber
-         WHERE cliente_id = ?
-         AND status IN ('Aberta', 'Parcial')
-         ORDER BY data_vencimento ASC`,
+        FROM contas_receber
+        WHERE cliente_id = ?
+        AND status IN ('Aberta', 'Parcial')
+        ORDER BY data_vencimento ASC`,
         [cliente_id]
     );
 
@@ -45,7 +47,7 @@ async function listarContasReceberPorPedido(pedido_id) {
         `SELECT * 
         FROM contas_receber 
         WHERE pedido_id = ? 
-        ORDER BY pedido_id DESC`,
+        ORDER BY data_vencimento ASC`,
         [pedido_id]
     );
     return rows[0]
@@ -55,7 +57,7 @@ async function listarContasReceberEmAberto() {
     const [rows] = await pool.query(
         `SELECT * 
         FROM contas_receber 
-        WHERE status = Aberta 
+        WHERE status IN ('Aberta', 'Parcial') 
         ORDER BY pedido_id DESC`
     );
     return rows[0]
@@ -100,7 +102,44 @@ async function calcularSaldoDevedor(cliente_id) {
         [cliente_id]
     );
 
-    return rows[0];
+    return Number(rows[0].saldo_devedor);
+}
+
+async function atualizarStatusContaNaTransacao(conexao, id) {
+    const contas = await buscarEbloquearContasNaTransacao(conexao, [id]);
+
+    if (contas.length === 0) {
+        throw new Error('Conta a receber não encontrada');
+    }
+
+    const conta = contas[0];
+
+    if (conta.status === 'Cancelada') {
+        throw new Error('Não é possível atualizar uma conta cancelada');
+    }
+
+    const original = centavos(conta.valor_original);
+    const recebido = centavos(
+        await buscarTotalRecebidoPorContaNaTransacao(conexao, id)
+    );
+
+    if (recebido > original) {
+        throw new Error('O total recebido ultrapassa o valor original da conta');
+    }
+
+    let status;
+
+    if (recebido === original) {
+        status = 'Paga';
+    } else if (recebido > 0) {
+        status = 'Parcial';
+    } else {
+        status = 'Aberta';
+    }
+
+    await alterarStatusContaNaTransacao(conexao, id, status);
+
+    return status;
 }
 
 async function atualizarStatusConta(id) {
@@ -109,64 +148,14 @@ async function atualizarStatusConta(id) {
     try {
         await conexao.beginTransaction();
 
-        const contas = await buscarEbloquearContasNaTransacao(
-            conexao,
-            [id]
-        );
-
-        if (contas.length === 0) {
-            throw new Error('Conta a receber não encontrada');
-        }
-
-        const conta = contas[0];
-
-        if (conta.status === 'Cancelada') {
-            throw new Error('Não é possível atualizar uma conta cancelada');
-        }
-
-         // 2. Calcular total recebido
-        const totalRecebido = Math.round(
-            await buscarTotalRecebidoPorContaNaTransacao(
-                conexao,
-                id
-            ) * 100
-        );
-
-        const valorOriginal = Math.round(
-            Number(conta.valor_original) * 100
-        );
-
-        if (totalRecebido > valorOriginal) {
-            throw new Error(
-                'O total recebido ultrapassa o valor original da conta'
-            );
-        }
-
-        // 3. Determinar novo status
-        let novoStatus;
-
-        if (totalRecebido >= valorOriginal) {
-            novoStatus = 'Paga';
-        } else if (totalRecebido > 0) {
-            novoStatus = 'Parcial';
-        } else {
-            novoStatus = 'Aberta';
-        }
-
-        // 4. Atualizar status
-        await conexao.query(
-            `UPDATE contas_receber
-             SET status = ?
-             WHERE id = ?`,
-            [novoStatus, id]
-        );
+        const status = await alterarStatusContaNaTransacao(conexao, id);
 
         await conexao.commit();
 
         return {
             mensagem: 'Status da conta atualizado com sucesso',
             conta_receber_id: id,
-            status: novoStatus
+            status
         };
 
     } catch (erro) {
@@ -201,10 +190,7 @@ async function cancelarContaReceber(id) {
         }
 
         // 2. Verificar total recebido
-        const totalRecebido = await buscarTotalRecebidoPorContaNaTransacao(
-            conexao,
-            id
-        );
+        const totalRecebido = await buscarTotalRecebidoPorContaNaTransacao(conexao, id);
 
         if (totalRecebido > 0) {
             throw new Error(
@@ -213,10 +199,7 @@ async function cancelarContaReceber(id) {
         }
 
         // 3. Cancelar conta
-        await marcarContaComoCanceladaNaTransacao(
-            conexao,
-            id
-        );
+        await marcarContaComoCanceladaNaTransacao(conexao, id);
 
         await conexao.commit();
 
@@ -269,4 +252,21 @@ async function alterarStatusContaNaTransacao(conexao, id, status) {
          WHERE id = ?`,
         [status, id]
     );
+}
+
+export {
+    buscarContaReceberPorId,
+    listarContasReceber,
+    listarContasReceberPorCliente,
+    listarContasAbertasPorCliente,
+    listarContasReceberPorPedido,
+    listarContasReceberEmAberto,
+    listarContasReceberVencidas,
+    calcularSaldoDevedor,
+    atualizarStatusConta,
+    atualizarStatusContaNaTransacao,   
+    cancelarContaReceber,
+    buscarEbloquearContasNaTransacao,
+    marcarContaComoCanceladaNaTransacao,
+    alterarStatusContaNaTransacao
 }
